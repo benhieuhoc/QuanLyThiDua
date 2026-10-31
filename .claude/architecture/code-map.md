@@ -57,7 +57,7 @@ src/
     └── utils.ts                   # cn()
 ```
 
-`public/` chỉ chứa SVG mặc định. Không có mock data.
+`public/` chứa SVG mặc định và `demo-data/` (snapshot response BE cho bản demo, sinh bằng `scripts/snapshot-demo.mjs`, không sửa tay).
 
 ## Sitemap route
 
@@ -145,7 +145,7 @@ Root layout dùng `title.template = "%s · Quản lý lớp học"`. Thêm trang
 
 ## Tầng dữ liệu
 
-- `src/lib/api.ts`: `API_URL = NEXT_PUBLIC_API_URL ?? "http://localhost:3001"`. `api<T>` lỗi mạng → `ApiError(status 0)`; `!res.ok || !body.success` → `ApiError(message, status, errors)` (body không phải JSON → `"Lỗi <status>"`); trả `body.data as T`. `refreshAll = mutate(() => true)`. `errorMessage` ghép `errors[]` theo `message` hoặc `{ teacherid, classname }`.
+- `src/lib/api.ts`: `API_URL = NEXT_PUBLIC_API_URL ?? "http://localhost:3001"`. `api<T>` lỗi mạng → `ApiError(status 0)`; `!res.ok || !body.success` → `ApiError(message, status, errors)` (body không phải JSON → `"Lỗi <status>"`); trả `body.data as T`. Chế độ demo (`DEMO_MODE = NEXT_PUBLIC_DEMO_MODE === "true"`): không gọi BE; GET đọc `/demo-data/<demoFile(path)>` (file `{ status, body }`, query sắp xếp theo tên), thiếu file → `ApiError(404, "Bản demo chưa có dữ liệu…")`; POST/PUT/DELETE → `ApiError(403)` nên `runMutation`/`ConfirmDelete` hiện toast lỗi. `refreshAll = mutate(() => true)`. `errorMessage` ghép `errors[]` theo `message` hoặc `{ teacherid, classname }`.
 - `src/hooks/use-data.ts`:
   - Không tham số: `useBranches`, `useGrades`, `useTeachers`, `useClasses`, `useSchoolYears`, `useCurrentWeek` (`shouldRetryOnError: false`, vì 404 ngoài năm học là trường hợp bình thường).
   - Có tham số (key `null` khi thiếu): `useWeeks(schoolyearid)`, `usePoints(weekid, classid)`, `useWeeklyScore(weekid, scope)`, `useSummaryScore(schoolyearid, fromweek?, toweek?, scope)`, `useClassScore(classid, schoolyearid)`. `ScoreScope = { branchid?, gradeid? }`; `toQuery` bỏ giá trị rỗng.
@@ -231,7 +231,8 @@ Base URL: `NEXT_PUBLIC_API_URL`. Không route nào yêu cầu auth (BE ⬜ middl
 
 ## Cấu hình và kiểm tra
 
-- Biến môi trường: `NEXT_PUBLIC_API_URL` (`.env.example`).
+- Biến môi trường: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_DEMO_MODE` (`.env.example`).
+- `npm run snapshot:demo` (`scripts/snapshot-demo.mjs`): gọi GET theo các key SWR của `use-data.ts` (mọi tuần × phạm vi lọc, lượt chấm mọi tuần × lớp, điểm lớp theo năm, tổng hợp mặc định + mọi khoảng tuần đến `toweek` mặc định của BE) và ghi lại `public/demo-data/`. Cần chạy lại khi dữ liệu BE hoặc key SWR thay đổi.
 - BE cổng 3001, CORS `credentials: true`; chỉ `http://localhost:3000` được phép (chuỗi `'*'` trong allowlist không có tác dụng wildcard).
 - Dữ liệu seed DB dev (theo BE, 2026-10-29): 2 phân hiệu, 4 khối, 20 GV, 16 lớp; năm học 2026-2027 (bắt đầu 07/09/2026, 35 tuần), 507 lượt chấm cho tuần 1–8; tuần 1–7 đã khóa, tuần 8 đang mở. Đây là dữ liệu test, không phải contract.
 - Script: `npm run dev`, `npm run build`, `npm start`, `npm run lint`. Không có script test/typecheck riêng.

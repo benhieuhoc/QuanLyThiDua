@@ -10,7 +10,7 @@
 - Route nằm trong `src/app/(dashboard)/`; nội dung trang là client component trong `src/components/views/`; thành phần dùng chung trong `src/components/common.tsx` và `src/components/layout/`.
 - Tầng API: `src/lib/api.ts` (hàm `api<T>` dùng `fetch`, đọc response chuẩn `{ success, data, message }` của BE, ném `ApiError`), kiểu dữ liệu `src/lib/types.ts`, hook SWR `src/hooks/use-data.ts`.
 - Chưa có xác thực: FE không gửi token, BE chưa gắn middleware auth. Thiết kế quyền (`admin`, `teacher`) nằm ở `../BE/Ai_rules/security.md` nhưng chưa triển khai.
-- Không có dữ liệu mẫu (mock); mọi dữ liệu lấy từ BE.
+- Không có dữ liệu mẫu viết tay; mọi dữ liệu lấy từ BE. Riêng bản demo (`NEXT_PUBLIC_DEMO_MODE=true`) đọc snapshot response BE trong `public/demo-data/` (`npm run snapshot:demo`) và chặn mọi thao tác ghi.
 - Cột ngày của BE trả chuỗi `"YYYY-MM-DD"`; định dạng bằng `src/lib/format.ts`, không đưa qua `new Date()` (lệch múi giờ). Với `cacheComponents`, gọi `new Date()` lúc prerender sẽ lỗi build: chỉ tính "hôm nay" sau khi đã có dữ liệu API (xem `todayISO`).
 - Alias TypeScript `@/*` ánh xạ tới `src/*`.
 

@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":{"id":8,"schoolyearid":1,"numweek":8,"startdate":"2026-10-26","enddate":"2026-11-01","conduct_base":100,"study_base":100,"locked":false,"created_at":"2026-10-29","updated_at":"2026-10-29","schoolyearname":"2026-2027","entries":62},"message":"Thành công"}}
