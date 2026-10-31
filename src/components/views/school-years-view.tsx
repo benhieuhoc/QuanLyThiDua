@@ -1,0 +1,413 @@
+"use client"
+
+import { useState } from "react"
+import { Pencil, Plus, SlidersHorizontal } from "lucide-react"
+import { apiDelete, apiPost, apiPut } from "@/lib/api"
+import { formatDate, formatRange } from "@/lib/format"
+import type { SchoolYear, Week } from "@/lib/types"
+import { cn } from "@/lib/utils"
+import { useSchoolYears, useWeeks } from "@/hooks/use-data"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { ConfirmDelete, EmptyState, ErrorState, PageHeader, TableSkeleton, runMutation } from "@/components/common"
+import { LockWeekButton, WeekStatus } from "@/components/scores"
+
+// Giới hạn theo BE
+const MAX_WEEKS = 60
+const MAX_BASE = 1000
+
+// "YYYY-YYYY", năm sau = năm trước + 1
+const isValidYearName = (name: string) => {
+  const match = /^(\d{4})-(\d{4})$/.exec(name.trim())
+  return match !== null && Number(match[2]) === Number(match[1]) + 1
+}
+
+const isIntIn = (value: string, min: number, max: number) => {
+  const n = Number(value)
+  return value.trim() !== "" && Number.isInteger(n) && n >= min && n <= max
+}
+
+function CreateSchoolYearDialog() {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState("")
+  const [startdate, setStartdate] = useState("")
+  const [numweeks, setNumweeks] = useState("35")
+  const [conductBase, setConductBase] = useState("100")
+  const [studyBase, setStudyBase] = useState("100")
+  const [pending, setPending] = useState(false)
+
+  const valid =
+    isValidYearName(name) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(startdate) &&
+    isIntIn(numweeks, 1, MAX_WEEKS) &&
+    isIntIn(conductBase, 0, MAX_BASE) &&
+    isIntIn(studyBase, 0, MAX_BASE)
+
+  const onOpenChange = (next: boolean) => {
+    if (next) {
+      setName("")
+      setStartdate("")
+      setNumweeks("35")
+      setConductBase("100")
+      setStudyBase("100")
+    }
+    setOpen(next)
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!valid) return
+    setPending(true)
+    const ok = await runMutation(
+      () =>
+        apiPost("/school-years", {
+          name: name.trim(),
+          startdate,
+          numweeks: Number(numweeks),
+          conduct_base: Number(conductBase),
+          study_base: Number(studyBase),
+        }),
+      `Đã tạo năm học ${name.trim()} với ${numweeks} tuần`
+    )
+    setPending(false)
+    if (ok) setOpen(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button>
+          <Plus /> Tạo năm học
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <form onSubmit={submit} className="grid gap-4">
+          <DialogHeader>
+            <DialogTitle>Tạo năm học</DialogTitle>
+            <DialogDescription>
+              Các tuần được tạo tự động, mỗi tuần 7 ngày liên tiếp tính từ ngày bắt đầu.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="year-name">Tên năm học</Label>
+              <Input id="year-name" value={name} placeholder="2027-2028" onChange={(e) => setName(e.target.value)} autoFocus />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="year-start">Ngày bắt đầu</Label>
+              <Input id="year-start" type="date" value={startdate} onChange={(e) => setStartdate(e.target.value)} />
+            </div>
+          </div>
+          {name.trim() !== "" && !isValidYearName(name) && (
+            <p className="-mt-2 text-xs text-destructive">Tên dạng YYYY-YYYY, năm sau bằng năm trước + 1.</p>
+          )}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="year-weeks">Số tuần</Label>
+              <Input id="year-weeks" type="number" min={1} max={MAX_WEEKS} value={numweeks} onChange={(e) => setNumweeks(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="year-conduct">Gốc Nề nếp</Label>
+              <Input id="year-conduct" type="number" min={0} max={MAX_BASE} value={conductBase} onChange={(e) => setConductBase(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="year-study">Gốc Học tập</Label>
+              <Input id="year-study" type="number" min={0} max={MAX_BASE} value={studyBase} onChange={(e) => setStudyBase(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Hủy</Button>
+            </DialogClose>
+            <Button type="submit" disabled={!valid || pending}>
+              {pending ? "Đang tạo..." : "Tạo năm học"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function EditSchoolYearDialog({ year }: { year: SchoolYear }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState("")
+  const [numweeks, setNumweeks] = useState("")
+  const [pending, setPending] = useState(false)
+
+  const valid = isValidYearName(name) && isIntIn(numweeks, 1, MAX_WEEKS)
+  const shrinking = isIntIn(numweeks, 1, MAX_WEEKS) && Number(numweeks) < year.numweeks
+
+  const onOpenChange = (next: boolean) => {
+    if (next) {
+      setName(year.name)
+      setNumweeks(String(year.numweeks))
+    }
+    setOpen(next)
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!valid) return
+    setPending(true)
+    const ok = await runMutation(
+      () => apiPut(`/school-years/${year.id}`, { name: name.trim(), numweeks: Number(numweeks) }),
+      "Đã cập nhật năm học"
+    )
+    setPending(false)
+    if (ok) setOpen(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={`Sửa năm học ${year.name}`} className="text-muted-foreground">
+          <Pencil />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <form onSubmit={submit} className="grid gap-4">
+          <DialogHeader>
+            <DialogTitle>Sửa năm học</DialogTitle>
+            <DialogDescription>Tăng số tuần sẽ tạo thêm tuần ở cuối, lấy điểm gốc theo tuần cuối hiện tại.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-year-name">Tên năm học</Label>
+              <Input id="edit-year-name" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-year-weeks">Số tuần</Label>
+              <Input id="edit-year-weeks" type="number" min={1} max={MAX_WEEKS} value={numweeks} onChange={(e) => setNumweeks(e.target.value)} />
+            </div>
+          </div>
+          {shrinking && (
+            <p className="text-xs text-amber-700">
+              Sẽ xóa tuần {Number(numweeks) + 1}–{year.numweeks}. Không xóa được nếu các tuần này đã có điểm.
+            </p>
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Hủy</Button>
+            </DialogClose>
+            <Button type="submit" disabled={!valid || pending}>
+              {pending ? "Đang lưu..." : "Lưu"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Tuần đã khóa phải mở khóa trước mới đổi được điểm gốc
+function EditWeekBaseDialog({ week }: { week: Week }) {
+  const [open, setOpen] = useState(false)
+  const [conductBase, setConductBase] = useState("")
+  const [studyBase, setStudyBase] = useState("")
+  const [applyToNext, setApplyToNext] = useState(false)
+  const [pending, setPending] = useState(false)
+
+  const valid = isIntIn(conductBase, 0, MAX_BASE) && isIntIn(studyBase, 0, MAX_BASE)
+
+  const onOpenChange = (next: boolean) => {
+    if (next) {
+      setConductBase(String(week.conduct_base))
+      setStudyBase(String(week.study_base))
+      setApplyToNext(false)
+    }
+    setOpen(next)
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!valid) return
+    setPending(true)
+    const ok = await runMutation(
+      () =>
+        apiPut(`/weeks/${week.id}`, {
+          conduct_base: Number(conductBase),
+          study_base: Number(studyBase),
+          applyToNext,
+        }),
+      applyToNext ? `Đã đổi điểm gốc từ tuần ${week.numweek}` : `Đã đổi điểm gốc tuần ${week.numweek}`
+    )
+    setPending(false)
+    if (ok) setOpen(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Sửa điểm gốc tuần ${week.numweek}`}
+          title={week.locked ? "Mở khóa tuần để sửa điểm gốc" : undefined}
+          className="text-muted-foreground"
+          disabled={week.locked}
+        >
+          <SlidersHorizontal />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <form onSubmit={submit} className="grid gap-4">
+          <DialogHeader>
+            <DialogTitle>Điểm gốc tuần {week.numweek}</DialogTitle>
+            <DialogDescription>
+              {formatRange(week.startdate, week.enddate)}. Điểm của lớp = điểm gốc + các lượt cộng/trừ.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="week-conduct">Nề nếp</Label>
+              <Input id="week-conduct" type="number" min={0} max={MAX_BASE} value={conductBase} onChange={(e) => setConductBase(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="week-study">Học tập</Label>
+              <Input id="week-study" type="number" min={0} max={MAX_BASE} value={studyBase} onChange={(e) => setStudyBase(e.target.value)} />
+            </div>
+          </div>
+          <Label className="flex items-center gap-2 font-normal">
+            <Checkbox checked={applyToNext} onCheckedChange={(v) => setApplyToNext(v === true)} />
+            Áp dụng cho các tuần sau chưa khóa
+          </Label>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Hủy</Button>
+            </DialogClose>
+            <Button type="submit" disabled={!valid || pending}>
+              {pending ? "Đang lưu..." : "Lưu"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function WeeksTable({ year }: { year: SchoolYear }) {
+  const weeks = useWeeks(year.id)
+
+  if (weeks.error) return <ErrorState error={weeks.error} onRetry={() => weeks.mutate()} />
+  if (weeks.isLoading) return <TableSkeleton rows={8} />
+  if (!weeks.data?.length) return <EmptyState title="Năm học chưa có tuần" />
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="pl-4">Tuần</TableHead>
+          <TableHead>Thời gian</TableHead>
+          <TableHead className="text-right">Gốc Nề nếp</TableHead>
+          <TableHead className="text-right">Gốc Học tập</TableHead>
+          <TableHead className="hidden text-right sm:table-cell">Lượt chấm</TableHead>
+          <TableHead>Trạng thái</TableHead>
+          <TableHead className="pr-4" />
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {weeks.data.map((w) => (
+          <TableRow key={w.id}>
+            <TableCell className="pl-4 font-medium">Tuần {w.numweek}</TableCell>
+            <TableCell className="text-muted-foreground">{formatRange(w.startdate, w.enddate)}</TableCell>
+            <TableCell className="text-right tabular-nums">{w.conduct_base}</TableCell>
+            <TableCell className="text-right tabular-nums">{w.study_base}</TableCell>
+            <TableCell className="hidden text-right tabular-nums sm:table-cell">{w.entries}</TableCell>
+            <TableCell>
+              <WeekStatus week={w} />
+            </TableCell>
+            <TableCell className="pr-4">
+              <div className="flex justify-end gap-1">
+                <EditWeekBaseDialog week={w} />
+                <LockWeekButton week={w} />
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+export function SchoolYearsView() {
+  const years = useSchoolYears()
+  const [yearId, setYearId] = useState<number>()
+  const selected = years.data?.find((y) => y.id === yearId) ?? years.data?.[0]
+
+  return (
+    <>
+      <PageHeader
+        title="Năm học & tuần"
+        description="Tạo năm học, đặt điểm gốc từng tuần và khóa tuần đã chấm xong."
+        actions={<CreateSchoolYearDialog />}
+      />
+
+      {years.error ? (
+        <Card className="py-0">
+          <ErrorState error={years.error} onRetry={() => years.mutate()} />
+        </Card>
+      ) : years.isLoading ? (
+        <Card className="py-0">
+          <TableSkeleton />
+        </Card>
+      ) : !years.data?.length || !selected ? (
+        <Card className="py-0">
+          <EmptyState title="Chưa có năm học" description="Tạo năm học đầu tiên để bắt đầu chấm điểm thi đua." />
+        </Card>
+      ) : (
+        <div className="grid items-start gap-4 lg:grid-cols-[280px_1fr]">
+          <Card className="gap-0 py-0">
+            <ul className="divide-y divide-border/70">
+              {years.data.map((y) => (
+                <li key={y.id} className={cn("flex items-center gap-1 pr-2", y.id === selected.id && "bg-primary/10")}>
+                  <button
+                    type="button"
+                    onClick={() => setYearId(y.id)}
+                    aria-current={y.id === selected.id ? "true" : undefined}
+                    className="min-w-0 flex-1 px-4 py-3 text-left"
+                  >
+                    <p className="font-semibold">{y.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(y.startdate)} – {formatDate(y.enddate)} · {y.numweeks} tuần
+                    </p>
+                  </button>
+                  <EditSchoolYearDialog year={y} />
+                  <ConfirmDelete
+                    title={`Xóa năm học ${y.name}?`}
+                    description="Xóa cả các tuần của năm học. Chỉ xóa được khi chưa có điểm thi đua."
+                    onConfirm={() => apiDelete(`/school-years/${y.id}`)}
+                  />
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card className="gap-0 py-0">
+            <div className="border-b border-border/70 px-4 py-3">
+              <p className="font-medium">Các tuần năm học {selected.name}</p>
+              <p className="text-xs text-muted-foreground">
+                Tuần đã khóa không thể chấm thêm hay đổi điểm gốc. Mở khóa để sửa.
+              </p>
+            </div>
+            <WeeksTable year={selected} />
+          </Card>
+        </div>
+      )}
+    </>
+  )
+}
