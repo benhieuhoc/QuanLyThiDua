@@ -5,7 +5,7 @@ Tuân theo cấu trúc App Router và ranh giới module đang có. Quy tắc n�
 ## Cấu trúc đã xác minh
 
 - `src/app/layout.tsx` là root layout: import `globals.css`, font, `TooltipProvider` và `Toaster` (sonner).
-- Route group `(dashboard)` có `layout.tsx` dựng sidebar (`Brand`, `SidebarNav`), `AppHeader` và vùng `<main>`. Mọi trang nằm trong group này: thi đua `/`, `/cham-diem`, `/bang-diem`, `/tong-hop`; cấu hình `/nam-hoc`, `/phan-hieu`, `/giao-vien`, `/lop-hoc`.
+- Route group `(dashboard)` có `layout.tsx` dựng sidebar (`Brand`, `SidebarNav`), `AppHeader` và vùng `<main>`. Mọi trang nằm trong group này: thi đua `/`, `/cham-diem`, `/tong-hop`, `/diem-lop`; cấu hình `/nam-hoc`, `/phan-hieu`, `/giao-vien`, `/lop-hoc`, `/hoc-sinh`.
 - Mỗi `page.tsx` là server component: chỉ khai báo `metadata` và render một view trong `src/components/views/`. View là client component chứa toàn bộ state, bảng, dialog.
 - `src/components/common.tsx` chứa thành phần dùng chung giữa các view; `src/components/scores.tsx` chứa thành phần dùng chung giữa các trang thi đua; `src/components/layout/` chứa sidebar/header và `nav.ts` (danh sách menu); `src/components/ui/` là primitive shadcn.
 - Tầng dữ liệu: `src/lib/api.ts` (gọi API), `src/lib/types.ts` (kiểu response BE), `src/hooks/use-data.ts` (hook SWR), `src/hooks/use-week-picker.ts` (chọn năm học + tuần). `src/lib/utils.ts` chỉ chứa `cn()`; `src/lib/format.ts` định dạng ngày/điểm.

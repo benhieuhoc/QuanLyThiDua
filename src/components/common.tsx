@@ -94,6 +94,15 @@ export function StatCard({
   )
 }
 
+// Tên GVCN; lớp chưa phân công thì hiện chữ mờ
+export function TeacherName({ name, className }: { name: string | null; className?: string }) {
+  return name ? (
+    <span className={className}>{name}</span>
+  ) : (
+    <span className={cn("font-normal text-muted-foreground italic", className)}>Chưa có GVCN</span>
+  )
+}
+
 export function EmptyState({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-4 py-14 text-center">

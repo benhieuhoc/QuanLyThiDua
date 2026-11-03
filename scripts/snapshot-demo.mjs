@@ -53,21 +53,47 @@ if (!branches || !grades || !classes || !schoolYears) {
 }
 await snapshotAll(["/teachers", "/weeks/current"])
 
-// Phạm vi lọc phân hiệu/khối của trang bảng điểm, tổng hợp
+// Phạm vi lọc phân hiệu/khối của trang xếp hạng, học sinh
 const scopes = [{}]
 for (const b of branches) scopes.push({ branchid: b.id })
 for (const g of grades) scopes.push({ gradeid: g.id })
 for (const b of branches) for (const g of grades) scopes.push({ branchid: b.id, gradeid: g.id })
+
+// Trang học sinh: "/students" khi không lọc, còn lại theo phân hiệu/khối hoặc theo lớp; dialog học sinh của lớp
+const [allStudents] = await Promise.all(["/students"].map(snapshot))
+await snapshotAll([
+  ...scopes.filter((scope) => toQuery(scope)).map((scope) => `/students?${toQuery(scope)}`),
+  ...classes.map((c) => `/students?classid=${c.id}`),
+  ...classes.map((c) => `/classes/${c.id}`),
+  // Trang Điểm lớp: mọi lượt chấm của lớp
+  ...classes.map((c) => `/points?classid=${c.id}`),
+  // Lịch sử lượt chấm của từng học sinh
+  ...(allStudents ?? []).map((st) => `/points?studentid=${st.id}`),
+])
 
 for (const year of schoolYears) {
   const weeks = (await snapshot(`/weeks?schoolyearid=${year.id}`)) ?? []
   const paths = []
 
   for (const w of weeks) {
-    for (const scope of scopes) paths.push(`/scores/weekly?${toQuery({ weekid: w.id, ...scope })}`)
+    paths.push(`/scores/weekly?weekid=${w.id}`)
     for (const c of classes) paths.push(`/points?weekid=${w.id}&classid=${c.id}`)
   }
   for (const c of classes) paths.push(`/scores/class/${c.id}?schoolyearid=${year.id}`)
+
+  // Xếp hạng tuần/tháng/học kỳ: chỉ các khoảng đã bắt đầu (khoảng chưa bắt đầu bị tắt trong ô chọn)
+  const periods = await snapshot(`/scores/periods?schoolyearid=${year.id}`)
+  if (periods) {
+    const started = new Set(periods.weeks.filter((w) => w.started).map((w) => w.numweek))
+    const ranges = [
+      ...[...started].map((n) => ({ week: n })),
+      ...periods.months.filter((m) => started.has(m.fromweek)).map((m) => ({ month: m.value })),
+      ...periods.semesters.filter((s) => started.has(s.fromweek)).map((s) => ({ semester: s.value })),
+    ]
+    for (const range of ranges) {
+      for (const scope of scopes) paths.push(`/scores/ranking?${toQuery({ schoolyearid: year.id, ...range, ...scope })}`)
+    }
+  }
 
   // Tổng hợp: mặc định + mọi khoảng tuần đến tuần đã bắt đầu gần nhất (toweek mặc định của BE).
   // Khoảng vượt quá tuần đó không được chụp, bản demo báo chưa có dữ liệu

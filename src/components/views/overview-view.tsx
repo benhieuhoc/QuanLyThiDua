@@ -8,7 +8,7 @@ import { useWeekPicker } from "@/hooks/use-week-picker"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { EmptyState, ErrorState, PageHeader, StatCard, TableSkeleton } from "@/components/common"
+import { EmptyState, ErrorState, PageHeader, StatCard, TableSkeleton, TeacherName } from "@/components/common"
 import { ClassName, RankBadge, WeekStatus } from "@/components/scores"
 
 const TOP = 5
@@ -83,8 +83,8 @@ export function OverviewView() {
             <CardDescription>Xếp theo tổng điểm Nề nếp + Học tập</CardDescription>
             <CardAction>
               <Button variant="ghost" size="sm" asChild>
-                <Link href="/bang-diem">
-                  Bảng điểm <ArrowRight />
+                <Link href="/tong-hop">
+                  Xếp hạng <ArrowRight />
                 </Link>
               </Button>
             </CardAction>
@@ -112,7 +112,7 @@ export function OverviewView() {
                   <li key={s.classid} className="flex items-center gap-3 py-2.5">
                     <RankBadge rank={s.rank} />
                     <ClassName name={s.classname} />
-                    <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{s.teachername}</span>
+                    <TeacherName name={s.teachername} className="min-w-0 flex-1 truncate text-sm text-muted-foreground" />
                     <span className="hidden text-xs text-muted-foreground tabular-nums sm:inline">
                       NN {s.conduct_score} · HT {s.study_score}
                     </span>

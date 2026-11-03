@@ -41,6 +41,38 @@ const isIntIn = (value: string, min: number, max: number) => {
   return value.trim() !== "" && Number.isInteger(n) && n >= min && n <= max
 }
 
+// Mặc định của BE khi chưa đặt tuần bắt đầu học kỳ 2
+const defaultSemester2 = (numweeks: number) => Math.ceil(numweeks / 2) + 1
+
+// Để trống = dùng mặc định; có giá trị thì từ tuần 2 đến tuần cuối
+const isValidSemester2 = (value: string, numweeks: string) =>
+  value.trim() === "" || (isIntIn(numweeks, 1, MAX_WEEKS) && isIntIn(value, 2, Number(numweeks)))
+
+function Semester2Field({ id, value, onChange, numweeks }: { id: string; value: string; onChange: (v: string) => void; numweeks: string }) {
+  const n = Number(numweeks)
+  const invalid = !isValidSemester2(value, numweeks)
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id}>Tuần bắt đầu học kỳ 2</Label>
+      <Input
+        id={id}
+        type="number"
+        min={2}
+        max={isIntIn(numweeks, 1, MAX_WEEKS) ? n : MAX_WEEKS}
+        value={value}
+        placeholder={isIntIn(numweeks, 1, MAX_WEEKS) ? `Mặc định: tuần ${defaultSemester2(n)}` : ""}
+        aria-invalid={invalid}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <p className={cn("text-xs", invalid ? "text-destructive" : "text-muted-foreground")}>
+        {invalid
+          ? `Từ tuần 2 đến tuần ${isIntIn(numweeks, 1, MAX_WEEKS) ? n : "cuối"}.`
+          : "Để trống để dùng mặc định (nửa sau năm học)."}
+      </p>
+    </div>
+  )
+}
+
 function CreateSchoolYearDialog() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
@@ -48,6 +80,7 @@ function CreateSchoolYearDialog() {
   const [numweeks, setNumweeks] = useState("35")
   const [conductBase, setConductBase] = useState("100")
   const [studyBase, setStudyBase] = useState("100")
+  const [semester2, setSemester2] = useState("")
   const [pending, setPending] = useState(false)
 
   const valid =
@@ -55,7 +88,8 @@ function CreateSchoolYearDialog() {
     /^\d{4}-\d{2}-\d{2}$/.test(startdate) &&
     isIntIn(numweeks, 1, MAX_WEEKS) &&
     isIntIn(conductBase, 0, MAX_BASE) &&
-    isIntIn(studyBase, 0, MAX_BASE)
+    isIntIn(studyBase, 0, MAX_BASE) &&
+    isValidSemester2(semester2, numweeks)
 
   const onOpenChange = (next: boolean) => {
     if (next) {
@@ -64,6 +98,7 @@ function CreateSchoolYearDialog() {
       setNumweeks("35")
       setConductBase("100")
       setStudyBase("100")
+      setSemester2("")
     }
     setOpen(next)
   }
@@ -80,6 +115,7 @@ function CreateSchoolYearDialog() {
           numweeks: Number(numweeks),
           conduct_base: Number(conductBase),
           study_base: Number(studyBase),
+          ...(semester2.trim() && { semester2_week: Number(semester2) }),
         }),
       `Đã tạo năm học ${name.trim()} với ${numweeks} tuần`
     )
@@ -129,6 +165,7 @@ function CreateSchoolYearDialog() {
               <Input id="year-study" type="number" min={0} max={MAX_BASE} value={studyBase} onChange={(e) => setStudyBase(e.target.value)} />
             </div>
           </div>
+          <Semester2Field id="year-semester2" value={semester2} onChange={setSemester2} numweeks={numweeks} />
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">Hủy</Button>
@@ -147,15 +184,17 @@ function EditSchoolYearDialog({ year }: { year: SchoolYear }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [numweeks, setNumweeks] = useState("")
+  const [semester2, setSemester2] = useState("")
   const [pending, setPending] = useState(false)
 
-  const valid = isValidYearName(name) && isIntIn(numweeks, 1, MAX_WEEKS)
+  const valid = isValidYearName(name) && isIntIn(numweeks, 1, MAX_WEEKS) && isValidSemester2(semester2, numweeks)
   const shrinking = isIntIn(numweeks, 1, MAX_WEEKS) && Number(numweeks) < year.numweeks
 
   const onOpenChange = (next: boolean) => {
     if (next) {
       setName(year.name)
       setNumweeks(String(year.numweeks))
+      setSemester2(String(year.semester2_week))
     }
     setOpen(next)
   }
@@ -165,7 +204,15 @@ function EditSchoolYearDialog({ year }: { year: SchoolYear }) {
     if (!valid) return
     setPending(true)
     const ok = await runMutation(
-      () => apiPut(`/school-years/${year.id}`, { name: name.trim(), numweeks: Number(numweeks) }),
+      () =>
+        apiPut(`/school-years/${year.id}`, {
+          name: name.trim(),
+          numweeks: Number(numweeks),
+          // Chỉ gửi khi đổi, để năm học đang dùng mặc định không bị cố định số tuần; để trống = về mặc định của BE
+          ...(semester2 !== String(year.semester2_week) && {
+            semester2_week: semester2.trim() ? Number(semester2) : null,
+          }),
+        }),
       "Đã cập nhật năm học"
     )
     setPending(false)
@@ -200,6 +247,7 @@ function EditSchoolYearDialog({ year }: { year: SchoolYear }) {
               Sẽ xóa tuần {Number(numweeks) + 1}–{year.numweeks}. Không xóa được nếu các tuần này đã có điểm.
             </p>
           )}
+          <Semester2Field id="edit-year-semester2" value={semester2} onChange={setSemester2} numweeks={numweeks} />
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">Hủy</Button>
@@ -384,6 +432,9 @@ export function SchoolYearsView() {
                     <p className="font-semibold">{y.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {formatDate(y.startdate)} – {formatDate(y.enddate)} · {y.numweeks} tuần
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      HK1: tuần 1–{y.semester2_week - 1} · HK2: tuần {y.semester2_week}–{y.numweeks}
                     </p>
                   </button>
                   <EditSchoolYearDialog year={y} />

@@ -1,9 +1,10 @@
 import {
   Building2,
   CalendarRange,
+  ChartColumn,
   ClipboardPen,
+  GraduationCap,
   LayoutDashboard,
-  ListOrdered,
   School,
   Trophy,
   Users,
@@ -28,8 +29,8 @@ export const navSections: NavSection[] = [
     items: [
       { href: "/", label: "Tổng quan", icon: LayoutDashboard },
       { href: "/cham-diem", label: "Chấm điểm", icon: ClipboardPen },
-      { href: "/bang-diem", label: "Bảng điểm tuần", icon: ListOrdered },
-      { href: "/tong-hop", label: "Tổng hợp", icon: Trophy },
+      { href: "/tong-hop", label: "Xếp hạng", icon: Trophy },
+      { href: "/diem-lop", label: "Điểm lớp", icon: ChartColumn },
     ],
   },
   {
@@ -39,6 +40,7 @@ export const navSections: NavSection[] = [
       { href: "/phan-hieu", label: "Phân hiệu", icon: Building2 },
       { href: "/giao-vien", label: "Giáo viên", icon: Users },
       { href: "/lop-hoc", label: "Lớp học", icon: School },
+      { href: "/hoc-sinh", label: "Học sinh", icon: GraduationCap },
     ],
   },
 ]

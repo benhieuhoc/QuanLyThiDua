@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, UserRoundPen } from "lucide-react"
+import { Minus, Plus, UserRoundPen } from "lucide-react"
 import { apiDelete, apiPost, apiPut } from "@/lib/api"
 import type { Branch, ClassItem, Grade, Teacher } from "@/lib/types"
-import { useBranches, useClasses, useGrades, useTeachers } from "@/hooks/use-data"
+import { formatDate } from "@/lib/format"
+import { useBranches, useClass, useClasses, useGrades, useTeachers } from "@/hooks/use-data"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -31,10 +32,12 @@ import {
   GradeSelect,
   PageHeader,
   TableSkeleton,
+  TeacherName,
   runMutation,
 } from "@/components/common"
 
-// Tạo hàng loạt lớp cho 1 khối của 1 phân hiệu; thứ tự chọn giáo viên = thứ tự số lớp
+// Tạo hàng loạt lớp cho 1 khối của 1 phân hiệu; thứ tự chọn giáo viên = thứ tự số lớp,
+// các lớp chưa có GVCN (phần tử null của teacherIds) xếp sau
 function CreateClassesDialog({
   grades,
   branches,
@@ -50,6 +53,7 @@ function CreateClassesDialog({
   const [gradeid, setGradeid] = useState("")
   const [branchid, setBranchid] = useState("")
   const [selected, setSelected] = useState<number[]>([])
+  const [unassigned, setUnassigned] = useState(0)
   const [pending, setPending] = useState(false)
 
   const grade = grades.find((g) => g.id === Number(gradeid))
@@ -58,12 +62,14 @@ function CreateClassesDialog({
   // Xem trước tên lớp; số thứ tự thật do BE cấp
   const maxSeq = Math.max(0, ...classes.filter((c) => c.gradeid === grade?.id && c.branchid === branch?.id).map((c) => c.seq))
   const previewName = (index: number) => (grade && branch ? `${grade.numgrade}${branch.code}${maxSeq + index + 1}` : "")
+  const total = selected.length + unassigned
 
   const onOpenChange = (next: boolean) => {
     if (next) {
       setGradeid(grades[0] ? String(grades[0].id) : "")
       setBranchid(branches[0] ? String(branches[0].id) : "")
       setSelected([])
+      setUnassigned(0)
     }
     setOpen(next)
   }
@@ -78,11 +84,12 @@ function CreateClassesDialog({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!grade || !branch || selected.length === 0) return
+    if (!grade || !branch || total === 0) return
+    const teacherIds: (number | null)[] = [...selected, ...Array<null>(unassigned).fill(null)]
     setPending(true)
     const ok = await runMutation(
-      () => apiPost("/classes", { gradeid: grade.id, branchid: branch.id, teacherIds: selected }),
-      `Đã tạo ${selected.length} lớp`
+      () => apiPost("/classes", { gradeid: grade.id, branchid: branch.id, teacherIds }),
+      `Đã tạo ${total} lớp`
     )
     setPending(false)
     if (ok) setOpen(false)
@@ -100,7 +107,8 @@ function CreateClassesDialog({
           <DialogHeader>
             <DialogTitle>Tạo lớp</DialogTitle>
             <DialogDescription>
-              Chọn khối, phân hiệu và giáo viên chủ nhiệm. Mỗi giáo viên được chọn tạo thành một lớp mới.
+              Chọn khối, phân hiệu và giáo viên chủ nhiệm. Mỗi giáo viên được chọn tạo thành một lớp mới; có thể tạo
+              thêm lớp chưa có GVCN để phân công sau.
             </DialogDescription>
           </DialogHeader>
 
@@ -149,19 +157,46 @@ function CreateClassesDialog({
                 </ul>
               )}
             </div>
-            {selected.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Sẽ tạo: {selected.map((_, i) => previewName(i)).join(", ")}
-              </p>
-            )}
           </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <Label id="class-unassigned">Lớp chưa có GVCN</Label>
+            <div className="flex items-center gap-1" role="group" aria-labelledby="class-unassigned">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                aria-label="Bớt một lớp chưa có GVCN"
+                disabled={unassigned === 0}
+                onClick={() => setUnassigned((n) => n - 1)}
+              >
+                <Minus />
+              </Button>
+              <span className="w-8 text-center font-medium tabular-nums">{unassigned}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                aria-label="Thêm một lớp chưa có GVCN"
+                onClick={() => setUnassigned((n) => n + 1)}
+              >
+                <Plus />
+              </Button>
+            </div>
+          </div>
+
+          {total > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Sẽ tạo: {Array.from({ length: total }, (_, i) => previewName(i)).join(", ")}
+            </p>
+          )}
 
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">Hủy</Button>
             </DialogClose>
-            <Button type="submit" disabled={selected.length === 0 || pending}>
-              {pending ? "Đang tạo..." : `Tạo ${selected.length || ""} lớp`}
+            <Button type="submit" disabled={total === 0 || pending}>
+              {pending ? "Đang tạo..." : `Tạo ${total || ""} lớp`}
             </Button>
           </DialogFooter>
         </form>
@@ -170,6 +205,9 @@ function CreateClassesDialog({
   )
 }
 
+// Giá trị Select ứng với "chưa có GVCN" (gửi teacherid: null)
+const NO_TEACHER = "none"
+
 function ChangeTeacherDialog({ cls, teachers }: { cls: ClassItem; teachers: Teacher[] }) {
   const [open, setOpen] = useState(false)
   const [teacherid, setTeacherid] = useState("")
@@ -177,9 +215,10 @@ function ChangeTeacherDialog({ cls, teachers }: { cls: ClassItem; teachers: Teac
 
   // Cùng phân hiệu, chưa chủ nhiệm (hoặc chính GVCN hiện tại)
   const options = teachers.filter((t) => t.branchid === cls.branchid && (t.classid === null || t.id === cls.teacherid))
+  const current = cls.teacherid === null ? NO_TEACHER : String(cls.teacherid)
 
   const onOpenChange = (next: boolean) => {
-    if (next) setTeacherid(String(cls.teacherid))
+    if (next) setTeacherid(current)
     setOpen(next)
   }
 
@@ -187,8 +226,8 @@ function ChangeTeacherDialog({ cls, teachers }: { cls: ClassItem; teachers: Teac
     e.preventDefault()
     setPending(true)
     const ok = await runMutation(
-      () => apiPut(`/classes/${cls.id}`, { teacherid: Number(teacherid) }),
-      `Đã đổi chủ nhiệm lớp ${cls.name}`
+      () => apiPut(`/classes/${cls.id}`, { teacherid: teacherid === NO_TEACHER ? null : Number(teacherid) }),
+      teacherid === NO_TEACHER ? `Đã bỏ phân công chủ nhiệm lớp ${cls.name}` : `Đã đổi chủ nhiệm lớp ${cls.name}`
     )
     setPending(false)
     if (ok) setOpen(false)
@@ -214,6 +253,9 @@ function ChangeTeacherDialog({ cls, teachers }: { cls: ClassItem; teachers: Teac
                 <SelectValue placeholder="Chọn giáo viên" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={NO_TEACHER}>
+                  {cls.teacherid === null ? "Chưa có GVCN (hiện tại)" : "Bỏ phân công (chưa có GVCN)"}
+                </SelectItem>
                 {options.map((t) => (
                   <SelectItem key={t.id} value={String(t.id)}>
                     {t.name}
@@ -227,11 +269,66 @@ function ChangeTeacherDialog({ cls, teachers }: { cls: ClassItem; teachers: Teac
             <DialogClose asChild>
               <Button type="button" variant="outline">Hủy</Button>
             </DialogClose>
-            <Button type="submit" disabled={!teacherid || teacherid === String(cls.teacherid) || pending}>
+            <Button type="submit" disabled={!teacherid || teacherid === current || pending}>
               {pending ? "Đang lưu..." : "Lưu"}
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Danh sách học sinh của 1 lớp (GET /classes/:id); thêm/sửa ở trang Học sinh
+function ClassStudentsDialog({ classid, onOpenChange }: { classid?: number; onOpenChange: (open: boolean) => void }) {
+  const result = useClass(classid)
+  const data = result.data
+
+  return (
+    <Dialog open={classid !== undefined} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{data ? `Lớp ${data.name}` : "Danh sách học sinh"}</DialogTitle>
+          <DialogDescription>
+            {data
+              ? `${data.teachername ? `GVCN ${data.teachername}` : "Chưa có GVCN"} · sĩ số ${data.numstudents}`
+              : "Học sinh của lớp"}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[60vh] overflow-y-auto">
+          {result.error ? (
+            <ErrorState error={result.error} onRetry={() => result.mutate()} />
+          ) : !data ? (
+            <TableSkeleton rows={6} />
+          ) : data.students.length === 0 ? (
+            <EmptyState title="Lớp chưa có học sinh" description="Thêm học sinh trong mục Học sinh." />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12 text-center">STT</TableHead>
+                  <TableHead>Mã HS</TableHead>
+                  <TableHead>Họ tên</TableHead>
+                  <TableHead className="hidden sm:table-cell">Giới tính</TableHead>
+                  <TableHead className="hidden sm:table-cell">Ngày sinh</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.students.map((st, i) => (
+                  <TableRow key={st.id}>
+                    <TableCell className="text-center text-muted-foreground tabular-nums">{i + 1}</TableCell>
+                    <TableCell className="font-mono text-xs">{st.code}</TableCell>
+                    <TableCell className="font-medium">{st.name}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{st.gender ?? "—"}</TableCell>
+                    <TableCell className="hidden tabular-nums sm:table-cell">
+                      {st.birthdate ? formatDate(st.birthdate) : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -244,6 +341,7 @@ export function ClassesView() {
   const classes = useClasses()
   const [branchFilter, setBranchFilter] = useState("all")
   const [gradeFilter, setGradeFilter] = useState("all")
+  const [detailClass, setDetailClass] = useState<number>()
 
   const rows = (classes.data ?? []).filter(
     (c) =>
@@ -301,7 +399,7 @@ export function ClassesView() {
           <EmptyState
             title={classes.data?.length ? "Không có lớp phù hợp" : "Chưa có lớp"}
             description={
-              classes.data?.length ? "Thử đổi bộ lọc." : "Thêm giáo viên trước, sau đó tạo lớp và chọn giáo viên chủ nhiệm."
+              classes.data?.length ? "Thử đổi bộ lọc." : "Tạo lớp, có thể chọn giáo viên chủ nhiệm ngay hoặc phân công sau."
             }
           />
         ) : (
@@ -312,6 +410,7 @@ export function ClassesView() {
                 <TableHead>Khối</TableHead>
                 <TableHead>Phân hiệu</TableHead>
                 <TableHead>Giáo viên chủ nhiệm</TableHead>
+                <TableHead className="text-right">Sĩ số</TableHead>
                 <TableHead className="w-24 pr-4" />
               </TableRow>
             </TableHeader>
@@ -319,19 +418,25 @@ export function ClassesView() {
               {rows.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="pl-4">
-                    <span className="inline-flex min-w-12 items-center justify-center rounded-lg bg-primary/10 px-2 py-1 font-semibold text-primary">
+                    <button
+                      type="button"
+                      onClick={() => setDetailClass(c.id)}
+                      aria-label={`Xem học sinh lớp ${c.name}`}
+                      className="inline-flex min-w-12 items-center justify-center rounded-lg bg-primary/10 px-2 py-1 font-semibold text-primary transition-colors hover:bg-primary/20"
+                    >
                       {c.name}
-                    </span>
+                    </button>
                   </TableCell>
                   <TableCell>Khối {c.numgrade}</TableCell>
                   <TableCell className="text-muted-foreground">{c.branchname}</TableCell>
-                  <TableCell className="font-medium">{c.teachername}</TableCell>
+                  <TableCell className="font-medium"><TeacherName name={c.teachername} /></TableCell>
+                  <TableCell className="text-right tabular-nums">{c.numstudents}</TableCell>
                   <TableCell className="pr-4">
                     <div className="flex justify-end gap-1">
                       <ChangeTeacherDialog cls={c} teachers={teachers.data ?? []} />
                       <ConfirmDelete
                         title={`Xóa lớp ${c.name}?`}
-                        description="Chỉ xóa được lớp chưa có điểm thi đua. Lớp tạo sau sẽ lấy số tiếp theo lớp lớn nhất còn lại."
+                        description="Chỉ xóa được lớp chưa có học sinh và chưa có điểm thi đua. Lớp tạo sau sẽ lấy số tiếp theo lớp lớn nhất còn lại."
                         onConfirm={() => apiDelete(`/classes/${c.id}`)}
                       />
                     </div>
@@ -342,6 +447,8 @@ export function ClassesView() {
           </Table>
         )}
       </Card>
+
+      <ClassStudentsDialog classid={detailClass} onOpenChange={(open) => !open && setDetailClass(undefined)} />
     </>
   )
 }

@@ -6,7 +6,7 @@ paths:
 
 # Tổ chức trang theo thực thể
 
-Chức năng chính là thi đua (`scoring-view`, `weekly-scores-view`, `summary-view`, `overview-view`); cấu hình gồm `school-years-view`, `branches-view`, `teachers-view`, `classes-view`. Mỗi trang một view; dùng các view hiện có làm mẫu.
+Chức năng chính là thi đua (`scoring-view`, `summary-view`, `class-detail-view`, `overview-view`); cấu hình gồm `school-years-view`, `branches-view`, `teachers-view`, `classes-view`, `students-view`. Mỗi trang một view; dùng các view hiện có làm mẫu.
 
 - Route: `src/app/(dashboard)/<slug>/page.tsx`, chỉ `metadata` + render view. View: `src/components/views/<entity>-view.tsx`, export `<Entity>View`.
 - Cấu trúc view: `PageHeader` (tiêu đề, mô tả, nút thêm) → bộ lọc (nếu có) → `Card` chứa bảng → các dialog thêm/sửa khai báo trong cùng file. Màn hình chỉ đọc tổng hợp (như `overview-view`) dùng `StatCard` + `Card`.

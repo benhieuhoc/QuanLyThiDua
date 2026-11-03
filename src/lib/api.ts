@@ -78,11 +78,22 @@ export const apiDelete = <T>(path: string) => api<T>(path, { method: "DELETE" })
 // nên sau mỗi thao tác ghi thì tải lại toàn bộ
 export const refreshAll = () => mutate(() => true)
 
+// Lỗi validate khi thêm nhiều học sinh có field "students[i].code": ghi kèm số dòng
+const rowLabel = (field?: string) => {
+  const index = field?.match(/^students\[(\d+)\]/)?.[1]
+  return index === undefined ? "" : `Dòng ${Number(index) + 1}: `
+}
+
 // Gộp message và chi tiết lỗi để hiển thị toast
 export function errorMessage(err: unknown) {
   if (err instanceof ApiError) {
     const detail = err.errors
-      ?.map((e) => e.message ?? (e.classname ? `GV #${e.teacherid} đang chủ nhiệm ${e.classname}` : e.teacherid ? `GV #${e.teacherid}` : null))
+      ?.map((e) =>
+        e.message
+          ? rowLabel(e.field) + e.message
+          : e.studentid ? (e.name ? String(e.name) : `HS #${e.studentid}`)
+          : e.classname ? `GV #${e.teacherid} đang chủ nhiệm ${e.classname}` : e.teacherid ? `GV #${e.teacherid}` : null
+      )
       .filter(Boolean)
       .join(", ")
     return { title: err.message, description: detail || undefined }

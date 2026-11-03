@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Lock, LockOpen } from "lucide-react"
+import Link from "next/link"
+import { ArrowRight, Lock, LockOpen } from "lucide-react"
 import { apiPut } from "@/lib/api"
 import { formatDate, formatRange, formatSigned, todayISO } from "@/lib/format"
 import type { Week } from "@/lib/types"
@@ -216,9 +217,16 @@ export function ClassScoreDialog({
           <DialogTitle>{data ? `Lớp ${data.class.name}` : "Điểm theo tuần"}</DialogTitle>
           <DialogDescription>
             {data
-              ? `GVCN ${data.class.teachername} · năm học ${data.schoolyear.name} · hạng là hạng toàn trường của tuần`
+              ? `${data.class.teachername ? `GVCN ${data.class.teachername}` : "Chưa có GVCN"} · năm học ${data.schoolyear.name} · hạng là hạng toàn trường của tuần`
               : "Điểm thi đua từng tuần của lớp"}
           </DialogDescription>
+          {classid !== undefined && (
+            <Button variant="outline" size="sm" className="mt-1 w-fit" asChild>
+              <Link href={`/diem-lop?lop=${classid}`}>
+                Xem điểm chi tiết <ArrowRight />
+              </Link>
+            </Button>
+          )}
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto">
           {result.error ? (

@@ -1,6 +1,6 @@
 # Thông tin dự án dành cho Claude Code
 
-Repository này là frontend **Quản lý lớp học**: web tiếng Việt để **chấm điểm thi đua các lớp theo tuần** (phần Nề nếp + Học tập), gọi REST API của backend Express ở `../BE`. Route thi đua: `/` (tổng quan), `/cham-diem` (trang chính), `/bang-diem`, `/tong-hop`. Route cấu hình: `/nam-hoc`, `/phan-hieu`, `/giao-vien`, `/lop-hoc`. Chưa có đăng nhập/phân quyền (BE cũng chưa có).
+Repository này là frontend **Quản lý lớp học**: web tiếng Việt để **chấm điểm thi đua các lớp theo tuần** (phần Nề nếp + Học tập), gọi REST API của backend Express ở `../BE`. Route thi đua: `/` (tổng quan), `/cham-diem` (trang chính), `/tong-hop` (xếp hạng tuần/tháng/học kỳ), `/diem-lop?lop=` (điểm chi tiết một lớp). Route cấu hình: `/nam-hoc`, `/phan-hieu`, `/giao-vien`, `/lop-hoc`, `/hoc-sinh`. Chưa có đăng nhập/phân quyền (BE cũng chưa có).
 
 @AGENTS.md
 
