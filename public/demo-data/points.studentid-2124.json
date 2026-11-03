@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":1063,"weekid":5,"classid":47,"type":"Học tập","content":"Sử dụng điện thoại trong giờ học","value":-3,"created_at":"2026-10-07","updated_at":"2026-10-07","classname":"9A7","numweek":5,"schoolyearid":1,"locked":true,"students":[{"id":2124,"code":"2303689710","name":"Mai Phước Đức Trọng"}]}],"message":"Thành công"}}

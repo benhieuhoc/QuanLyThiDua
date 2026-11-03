@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":1711,"weekid":8,"classid":36,"type":"Học tập","content":"Không thuộc bài","value":-2,"created_at":"2026-10-29","updated_at":"2026-10-29","classname":"8B1","numweek":8,"schoolyearid":1,"locked":false,"students":[{"id":1638,"code":"2404292833","name":"Nguyễn Thị Bảo Trâm"}]}],"message":"Thành công"}}

@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":1680,"weekid":8,"classid":28,"type":"Nề nếp","content":"Đi học muộn","value":-2,"created_at":"2026-10-25","updated_at":"2026-10-25","classname":"8A1","numweek":8,"schoolyearid":1,"locked":false,"students":[{"id":1240,"code":"2404510006","name":"Nguyễn Bảo Hân"}]}],"message":"Thành công"}}

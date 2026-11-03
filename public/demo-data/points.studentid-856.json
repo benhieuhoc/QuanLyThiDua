@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":956,"weekid":5,"classid":19,"type":"Nề nếp","content":"Đi học muộn","value":-1,"created_at":"2026-10-06","updated_at":"2026-10-06","classname":"7A6","numweek":5,"schoolyearid":1,"locked":true,"students":[{"id":856,"code":"2506157047","name":"Trần Gia Kiệt"}]}],"message":"Thành công"}}

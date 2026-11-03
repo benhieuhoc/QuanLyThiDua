@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":1571,"weekid":8,"classid":4,"type":"Học tập","content":"Mất trật tự trong giờ học","value":-3,"created_at":"2026-10-26","updated_at":"2026-10-26","classname":"6A4","numweek":8,"schoolyearid":1,"locked":false,"students":[{"id":171,"code":"2609141807","name":"Nguyễn Trần Khánh Ngọc"}]}],"message":"Thành công"}}

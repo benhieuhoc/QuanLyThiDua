@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":747,"weekid":4,"classid":23,"type":"Học tập","content":"Mất trật tự trong giờ học","value":-2,"created_at":"2026-09-27","updated_at":"2026-09-27","classname":"7B1","numweek":4,"schoolyearid":1,"locked":true,"students":[{"id":1015,"code":"2505629447","name":"Lê Nguyễn Gia Bảo"}]}],"message":"Thành công"}}

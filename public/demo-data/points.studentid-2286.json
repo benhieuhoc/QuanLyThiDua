@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":2007,"weekid":9,"classid":51,"type":"Nề nếp","content":"Xả rác không đúng nơi quy định","value":-3,"created_at":"2026-11-03","updated_at":"2026-11-03","classname":"9B2","numweek":9,"schoolyearid":1,"locked":false,"students":[{"id":2286,"code":"2303410706","name":"Phạm Ngọc Hân"}]}],"message":"Thành công"}}

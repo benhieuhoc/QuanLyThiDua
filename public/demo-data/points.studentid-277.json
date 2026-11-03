@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":680,"weekid":4,"classid":6,"type":"Nề nếp","content":"Xả rác không đúng nơi quy định","value":-3,"created_at":"2026-09-30","updated_at":"2026-09-30","classname":"6A6","numweek":4,"schoolyearid":1,"locked":true,"students":[{"id":277,"code":"2609143947","name":"Nguyễn Trần Quỳnh Thư"}]}],"message":"Thành công"}}

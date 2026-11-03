@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":1137,"weekid":6,"classid":9,"type":"Học tập","content":"Quên sách vở","value":-1,"created_at":"2026-10-12","updated_at":"2026-10-12","classname":"6B1","numweek":6,"schoolyearid":1,"locked":true,"students":[{"id":417,"code":"2609167267","name":"Trần Đinh Tùng"}]}],"message":"Thành công"}}

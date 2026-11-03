@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":1815,"weekid":9,"classid":5,"type":"Nề nếp","content":"Nghỉ học không phép","value":-4,"created_at":"2026-11-03","updated_at":"2026-11-03","classname":"6A5","numweek":9,"schoolyearid":1,"locked":false,"students":[{"id":206,"code":"2609142507","name":"Dương Phước Hải Duyên"}]}],"message":"Thành công"}}

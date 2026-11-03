@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":1283,"weekid":6,"classid":45,"type":"Nề nếp","content":"Đánh nhau trong giờ ra chơi","value":-5,"created_at":"2026-10-15","updated_at":"2026-10-15","classname":"9A5","numweek":6,"schoolyearid":1,"locked":true,"students":[{"id":2035,"code":"2303689623","name":"Lê Đức Trí"}]}],"message":"Thành công"}}

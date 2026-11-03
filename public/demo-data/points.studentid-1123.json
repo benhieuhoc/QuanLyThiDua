@@ -1,0 +1,1 @@
+{"status":200,"body":{"success":true,"data":[{"id":315,"weekid":2,"classid":25,"type":"Nề nếp","content":"Nghỉ học không phép","value":-5,"created_at":"2026-09-17","updated_at":"2026-09-17","classname":"7B3","numweek":2,"schoolyearid":1,"locked":true,"students":[{"id":1123,"code":"2505631407","name":"Nguyễn Như Ngọc"}]}],"message":"Thành công"}}
