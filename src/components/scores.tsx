@@ -4,10 +4,11 @@ import { useState } from "react"
 import Link from "next/link"
 import { ArrowRight, Lock, LockOpen } from "lucide-react"
 import { apiPut } from "@/lib/api"
+import { isAdmin } from "@/lib/auth"
 import { formatDate, formatRange, formatSigned, todayISO } from "@/lib/format"
 import type { Week } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { useBranches, useClassScore, useGrades, type ScoreScope } from "@/hooks/use-data"
+import { useBranches, useClassScore, useGrades, useMe, type ScoreScope } from "@/hooks/use-data"
 import type { WeekPicker } from "@/hooks/use-week-picker"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -82,9 +83,10 @@ export function WeekStatus({ week }: { week: Week }) {
   )
 }
 
-// Khóa: không thêm/sửa/xóa lượt chấm và điểm gốc nữa (BE trả 409)
+// Khóa: không thêm/sửa/xóa lượt chấm và điểm gốc nữa (BE trả 409). Chỉ admin thấy nút (BE trả 403 với tài khoản khác)
 export function LockWeekButton({ week, size = "sm" }: { week: Week; size?: "sm" | "default" }) {
   const [pending, setPending] = useState(false)
+  const canEdit = isAdmin(useMe().data)
 
   const toggle = async () => {
     setPending(true)
@@ -94,6 +96,8 @@ export function LockWeekButton({ week, size = "sm" }: { week: Week; size?: "sm" 
     )
     setPending(false)
   }
+
+  if (!canEdit) return null
 
   return (
     <Button variant="outline" size={size} onClick={toggle} disabled={pending}>

@@ -1,15 +1,17 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { ArrowRight, CalendarDays, ClipboardCheck, ListChecks, Trophy } from "lucide-react"
 import { formatRange } from "@/lib/format"
-import { useBranches, useClasses, useTeachers, useWeeklyScore } from "@/hooks/use-data"
+import { useBranches, useClasses, useMe, useTeachers, useWeeklyScore } from "@/hooks/use-data"
 import { useWeekPicker } from "@/hooks/use-week-picker"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { EmptyState, ErrorState, PageHeader, StatCard, TableSkeleton, TeacherName } from "@/components/common"
 import { ClassName, RankBadge, WeekStatus } from "@/components/scores"
+import { canAccessPath } from "@/components/layout/nav"
 
 const TOP = 5
 
@@ -21,6 +23,9 @@ export function OverviewView() {
   const branches = useBranches()
   const teachers = useTeachers()
   const classes = useClasses()
+  // Cờ đỏ chỉ vào Tổng quan và Chấm điểm: ẩn liên kết sang trang không được vào
+  const me = useMe().data
+  const canOpen = (href: string) => (me ? canAccessPath(me.kind, href) : false)
 
   const scores = weekly.data?.scores ?? []
   const unscored = scores.filter((s) => s.entries === 0)
@@ -32,6 +37,19 @@ export function OverviewView() {
 
   return (
     <>
+      {/* Banner trường: mobile cắt theo tỉ lệ 4:1 giữ phần logo + tiêu đề bên trái, từ md hiện đủ ảnh */}
+      <div className="mb-6 overflow-hidden rounded-2xl shadow-sm ring-1 ring-black/5">
+        <Image
+          src="/banner.jpg"
+          alt="Trường THCS Phan Đình Phùng – Trang web quản lý thi đua lớp học"
+          width={2172}
+          height={386}
+          sizes="(min-width: 1280px) 1232px, (min-width: 768px) calc(100vw - 304px), calc(100vw - 32px)"
+          preload
+          className="aspect-[4/1] h-auto w-full object-cover object-left md:aspect-auto"
+        />
+      </div>
+
       <PageHeader
         title="Tổng quan thi đua"
         description={
@@ -81,13 +99,15 @@ export function OverviewView() {
           <CardHeader>
             <CardTitle>Top {TOP} lớp trong tuần</CardTitle>
             <CardDescription>Xếp theo tổng điểm Nề nếp + Học tập</CardDescription>
-            <CardAction>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/tong-hop">
-                  Xếp hạng <ArrowRight />
-                </Link>
-              </Button>
-            </CardAction>
+            {canOpen("/tong-hop") && (
+              <CardAction>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/tong-hop">
+                    Xếp hạng <ArrowRight />
+                  </Link>
+                </Button>
+              </CardAction>
+            )}
           </CardHeader>
           <CardContent>
             {error ? (
@@ -99,9 +119,11 @@ export function OverviewView() {
                 title="Chưa có năm học"
                 description="Tạo năm học để bắt đầu chấm điểm."
                 action={
-                  <Button variant="outline" asChild>
-                    <Link href="/nam-hoc">Năm học & tuần</Link>
-                  </Button>
+                  canOpen("/nam-hoc") && (
+                    <Button variant="outline" asChild>
+                      <Link href="/nam-hoc">Năm học & tuần</Link>
+                    </Button>
+                  )
                 }
               />
             ) : scores.length === 0 ? (
@@ -161,10 +183,17 @@ export function OverviewView() {
                   { href: "/lop-hoc", label: "Lớp học", value: count(classes) },
                 ].map((item) => (
                   <li key={item.href}>
-                    <Link href={item.href} className="flex items-center justify-between py-2 hover:text-primary">
-                      <span>{item.label}</span>
-                      <span className="font-semibold tabular-nums">{item.value}</span>
-                    </Link>
+                    {canOpen(item.href) ? (
+                      <Link href={item.href} className="flex items-center justify-between py-2 hover:text-primary">
+                        <span>{item.label}</span>
+                        <span className="font-semibold tabular-nums">{item.value}</span>
+                      </Link>
+                    ) : (
+                      <div className="flex items-center justify-between py-2">
+                        <span>{item.label}</span>
+                        <span className="font-semibold tabular-nums">{item.value}</span>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

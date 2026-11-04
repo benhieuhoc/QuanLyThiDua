@@ -3,9 +3,10 @@
 import { useState } from "react"
 import { ChevronLeft, ChevronRight, History, Pencil, Plus, Search } from "lucide-react"
 import { apiDelete, apiPost, apiPut } from "@/lib/api"
+import { isAdmin } from "@/lib/auth"
 import { GENDERS, type ClassItem, type Gender, type Student } from "@/lib/types"
 import { formatDate } from "@/lib/format"
-import { useBranches, useClasses, useGrades, useStudentPoints, useStudents, type StudentScope } from "@/hooks/use-data"
+import { useBranches, useClasses, useGrades, useStudentPoints, useStudents, type StudentScope, useMe } from "@/hooks/use-data"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -372,6 +373,8 @@ export function StudentsView() {
   const [classFilter, setClassFilter] = useState("all")
   const [query, setQuery] = useState("")
   const [page, setPage] = useState(0)
+  // Chỉ admin được thêm / sửa / chuyển lớp / xóa (BE trả 403 với tài khoản khác)
+  const canEdit = isAdmin(useMe().data)
 
   // Đã chọn lớp thì chỉ lọc theo lớp; lớp chọn luôn nằm trong phân hiệu/khối đang lọc
   const scope: StudentScope =
@@ -424,10 +427,12 @@ export function StudentsView() {
         title="Học sinh"
         description="Mỗi học sinh thuộc một lớp và có mã học sinh duy nhất toàn trường."
         actions={
-          <AddStudentsDialog
-            classes={classes.data ?? []}
-            defaultClassid={classFilter === "all" ? undefined : Number(classFilter)}
-          />
+          canEdit && (
+            <AddStudentsDialog
+              classes={classes.data ?? []}
+              defaultClassid={classFilter === "all" ? undefined : Number(classFilter)}
+            />
+          )
         }
       />
 
@@ -486,7 +491,9 @@ export function StudentsView() {
         ) : rows.length === 0 ? (
           <EmptyState
             title={students.data?.length ? "Không có học sinh phù hợp" : "Chưa có học sinh"}
-            description={students.data?.length ? "Thử đổi từ khóa." : "Thêm học sinh vào lớp bằng nút Thêm học sinh."}
+            description={
+              students.data?.length ? "Thử đổi từ khóa." : canEdit ? "Thêm học sinh vào lớp bằng nút Thêm học sinh." : undefined
+            }
           />
         ) : (
           <>
@@ -499,7 +506,7 @@ export function StudentsView() {
                   <TableHead>Lớp</TableHead>
                   <TableHead className="hidden sm:table-cell">Giới tính</TableHead>
                   <TableHead className="hidden md:table-cell">Ngày sinh</TableHead>
-                  <TableHead className="w-28 pr-4" />
+                  <TableHead className={canEdit ? "w-28 pr-4" : "w-12 pr-4"} />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -522,12 +529,16 @@ export function StudentsView() {
                     <TableCell className="pr-4">
                       <div className="flex justify-end gap-1">
                         <StudentHistoryDialog student={s} />
-                        <EditStudentDialog student={s} classes={classes.data ?? []} />
-                        <ConfirmDelete
-                          title={`Xóa học sinh ${s.name}?`}
-                          description={`Học sinh ${s.code} sẽ bị xóa khỏi lớp ${s.classname}. Không xóa được học sinh đã được gắn vào lượt chấm điểm.`}
-                          onConfirm={() => apiDelete(`/students/${s.id}`)}
-                        />
+                        {canEdit && (
+                          <>
+                            <EditStudentDialog student={s} classes={classes.data ?? []} />
+                            <ConfirmDelete
+                              title={`Xóa học sinh ${s.name}?`}
+                              description={`Học sinh ${s.code} sẽ bị xóa khỏi lớp ${s.classname}. Không xóa được học sinh đã được gắn vào lượt chấm điểm.`}
+                              onConfirm={() => apiDelete(`/students/${s.id}`)}
+                            />
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

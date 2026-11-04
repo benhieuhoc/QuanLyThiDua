@@ -3,8 +3,9 @@
 import { useState } from "react"
 import { Pencil, Plus } from "lucide-react"
 import { apiDelete, apiPost, apiPut } from "@/lib/api"
+import { isAdmin } from "@/lib/auth"
 import type { Branch } from "@/lib/types"
-import { useBranches, useClasses, useTeachers } from "@/hooks/use-data"
+import { useBranches, useClasses, useMe, useTeachers } from "@/hooks/use-data"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -98,6 +99,8 @@ export function BranchesView() {
   const branches = useBranches()
   const teachers = useTeachers()
   const classes = useClasses()
+  // Chỉ admin được thêm / sửa / xóa (BE trả 403 với tài khoản khác)
+  const canEdit = isAdmin(useMe().data)
 
   const count = (list: { branchid: number }[] | undefined, id: number) => list?.filter((x) => x.branchid === id).length ?? 0
 
@@ -107,13 +110,15 @@ export function BranchesView() {
         title="Phân hiệu"
         description="Mỗi phân hiệu có mã riêng dùng trong tên lớp."
         actions={
-          <BranchFormDialog
-            trigger={
-              <Button>
-                <Plus /> Thêm phân hiệu
-              </Button>
-            }
-          />
+          canEdit && (
+            <BranchFormDialog
+              trigger={
+                <Button>
+                  <Plus /> Thêm phân hiệu
+                </Button>
+              }
+            />
+          )
         }
       />
 
@@ -123,7 +128,7 @@ export function BranchesView() {
         ) : branches.isLoading ? (
           <TableSkeleton rows={3} />
         ) : !branches.data?.length ? (
-          <EmptyState title="Chưa có phân hiệu" description="Thêm phân hiệu đầu tiên để bắt đầu." />
+          <EmptyState title="Chưa có phân hiệu" description={canEdit ? "Thêm phân hiệu đầu tiên để bắt đầu." : undefined} />
         ) : (
           <Table>
             <TableHeader>
@@ -132,7 +137,7 @@ export function BranchesView() {
                 <TableHead>Tên phân hiệu</TableHead>
                 <TableHead className="text-right">Giáo viên</TableHead>
                 <TableHead className="text-right">Lớp</TableHead>
-                <TableHead className="w-24 pr-4 text-right" />
+                {canEdit && <TableHead className="w-24 pr-4 text-right" />}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -146,23 +151,25 @@ export function BranchesView() {
                   <TableCell className="font-medium">{b.name}</TableCell>
                   <TableCell className="text-right tabular-nums">{count(teachers.data, b.id)}</TableCell>
                   <TableCell className="text-right tabular-nums">{count(classes.data, b.id)}</TableCell>
-                  <TableCell className="pr-4">
-                    <div className="flex justify-end gap-1">
-                      <BranchFormDialog
-                        branch={b}
-                        trigger={
-                          <Button variant="ghost" size="icon-sm" aria-label="Sửa" className="text-muted-foreground">
-                            <Pencil />
-                          </Button>
-                        }
-                      />
-                      <ConfirmDelete
-                        title={`Xóa ${b.name}?`}
-                        description="Chỉ xóa được khi phân hiệu không còn giáo viên và lớp."
-                        onConfirm={() => apiDelete(`/branches/${b.id}`)}
-                      />
-                    </div>
-                  </TableCell>
+                  {canEdit && (
+                    <TableCell className="pr-4">
+                      <div className="flex justify-end gap-1">
+                        <BranchFormDialog
+                          branch={b}
+                          trigger={
+                            <Button variant="ghost" size="icon-sm" aria-label="Sửa" className="text-muted-foreground">
+                              <Pencil />
+                            </Button>
+                          }
+                        />
+                        <ConfirmDelete
+                          title={`Xóa ${b.name}?`}
+                          description="Chỉ xóa được khi phân hiệu không còn giáo viên và lớp."
+                          onConfirm={() => apiDelete(`/branches/${b.id}`)}
+                        />
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

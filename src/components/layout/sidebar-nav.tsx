@@ -4,7 +4,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { GraduationCap } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { isActive, navSections } from "./nav"
+import { useMe } from "@/hooks/use-data"
+import { isActive, navSectionsFor } from "./nav"
 
 export function Brand() {
   return (
@@ -22,10 +23,12 @@ export function Brand() {
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
+  // Chưa biết loại tài khoản thì chưa hiện menu, tránh lộ mục không được phép
+  const me = useMe().data
 
   return (
     <nav className="flex flex-col gap-5">
-      {navSections.map((section) => (
+      {(me ? navSectionsFor(me.kind) : []).map((section) => (
         <div key={section.title} className="flex flex-col gap-1">
           <p className="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
             {section.title}

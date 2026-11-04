@@ -2,15 +2,17 @@
 
 import { useId, useRef, useState } from "react"
 import Link from "next/link"
-import { ChartColumn, Lock, Minus, Pencil, Plus, Search, X } from "lucide-react"
+import { ChartColumn, Eye, Info, Lock, Minus, Pencil, Plus, Search, X } from "lucide-react"
 import { apiDelete, apiPost, apiPut } from "@/lib/api"
+import { canManagePoint, canScoreClass } from "@/lib/auth"
 import { formatRange } from "@/lib/format"
-import { POINT_TYPES, type Point, type PointStudent, type PointType, type Score, type Week } from "@/lib/types"
+import { POINT_TYPES, type Account, type Point, type PointStudent, type PointType, type Score, type Week } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { usePoints, useStudents, useWeeklyScore, type ScoreScope } from "@/hooks/use-data"
+import { useMe, usePoints, useStudents, useWeeklyScore, type ScoreScope } from "@/hooks/use-data"
 import { useWeekPicker } from "@/hooks/use-week-picker"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -25,6 +27,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { ConfirmDelete, EmptyState, ErrorState, PageHeader, TableSkeleton, TeacherName, runMutation } from "@/components/common"
+import { canAccessPath } from "@/components/layout/nav"
 import {
   ClassName,
   LockWeekButton,
@@ -450,6 +453,7 @@ function PartSummary({ label, base, plus, minus, score }: { label: string; base:
 
 function PointList({ week, score }: { week: Week; score: Score }) {
   const points = usePoints(week.id, score.classid)
+  const me = useMe().data
 
   if (points.error) return <ErrorState error={points.error} onRetry={() => points.mutate()} />
   if (points.isLoading) return <TableSkeleton rows={3} />
@@ -478,9 +482,12 @@ function PointList({ week, score }: { week: Week; score: Score }) {
                           {p.students.map((st) => st.name).join(", ")}
                         </span>
                       )}
+                      <span className="block text-xs text-muted-foreground/80">
+                        Người nhập: {p.accountusername ?? "Không rõ"}
+                      </span>
                     </span>
                     <SignedValue value={p.value} />
-                    {!week.locked && (
+                    {!week.locked && canManagePoint(me, p) && (
                       <div className="flex">
                         <EditPointDialog point={p} />
                         <ConfirmDelete
@@ -501,7 +508,22 @@ function PointList({ week, score }: { week: Week; score: Score }) {
   )
 }
 
+const NO_CLASS_MESSAGE = "Bạn chưa được phân công lớp chấm điểm, liên hệ giáo viên quản lý nề nếp."
+
+// Lý do không chấm được lớp đang xem
+function readOnlyReason(me: Account | undefined) {
+  if (me?.kind === "codo") {
+    return me.classes.length
+      ? `Bạn chỉ chấm được lớp được phân công: ${me.classes.map((c) => c.name).join(", ")}.`
+      : NO_CLASS_MESSAGE
+  }
+  return "Bạn không có quyền chấm lớp này."
+}
+
 function ClassPanel({ week, score }: { week: Week; score: Score }) {
+  const me = useMe().data
+  const canScore = canScoreClass(me, score.classid)
+
   return (
     <Card className="gap-5 px-5 py-5">
       <div className="flex flex-wrap items-center gap-3">
@@ -511,11 +533,13 @@ function ClassPanel({ week, score }: { week: Week; score: Score }) {
           <p className="text-xs text-muted-foreground">Tuần {week.numweek} · {score.entries} lượt chấm</p>
         </div>
         <div className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={`/diem-lop?lop=${score.classid}`}>
-              <ChartColumn /> Chi tiết lớp
-            </Link>
-          </Button>
+          {me && canAccessPath(me.kind, "/diem-lop") && (
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/diem-lop?lop=${score.classid}`}>
+                <ChartColumn /> Chi tiết lớp
+              </Link>
+            </Button>
+          )}
           Hạng <RankBadge rank={score.rank} />
         </div>
       </div>
@@ -530,14 +554,20 @@ function ClassPanel({ week, score }: { week: Week; score: Score }) {
         </div>
       </div>
 
-      {week.locked ? (
+      {/* GVCN chỉ xem: ẩn toàn bộ phần thêm lượt chấm (trạng thái khóa tuần đã có badge ở header) */}
+      {me?.kind === "gvcn" ? null : week.locked ? (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-muted/50 p-4 text-sm">
           <Lock className="size-4 text-muted-foreground" />
           <span className="flex-1">Tuần {week.numweek} đã khóa, không thể thêm, sửa hay xóa lượt chấm.</span>
           <LockWeekButton week={week} />
         </div>
-      ) : (
+      ) : canScore ? (
         <AddPointForm week={week} score={score} />
+      ) : (
+        <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-muted/50 p-4 text-sm">
+          <Eye className="size-4 shrink-0 text-muted-foreground" />
+          <span className="flex-1">Chỉ xem. {readOnlyReason(me)}</span>
+        </div>
       )}
 
       <PointList week={week} score={score} />
@@ -552,11 +582,23 @@ export function ScoringView() {
   const weekly = useWeeklyScore(week?.id)
   const [scope, setScope] = useState<ScoreScope>({})
   const [classId, setClassId] = useState<number>()
+  const me = useMe().data
+  const isAdmin = me?.kind === "admin"
+  const isCodo = me?.kind === "codo"
+  // Cờ đỏ: mặc định chỉ hiện lớp được phân công, bỏ chọn để xem bảng điểm mọi lớp. GVCN chỉ xem nên không lọc
+  const [onlyMine, setOnlyMine] = useState(true)
+  const filterMine = isCodo && onlyMine
+  const noClass = isCodo && me.classes.length === 0
 
   const rows = (weekly.data?.scores ?? [])
     .filter((s) => (!scope.branchid || s.branchid === scope.branchid) && (!scope.gradeid || s.gradeid === scope.gradeid))
+    .filter((s) => !filterMine || canScoreClass(me, s.classid))
     .sort((a, b) => a.numgrade - b.numgrade || a.branchcode.localeCompare(b.branchcode) || a.seq - b.seq)
-  const selected = rows.find((s) => s.classid === classId) ?? rows[0]
+  // Mặc định: lớp được chấm đầu tiên (cờ đỏ), lớp chủ nhiệm (GVCN), còn lại lớp đầu danh sách
+  const selected =
+    rows.find((s) => s.classid === classId) ??
+    rows.find((s) => canScoreClass(me, s.classid) || s.classid === me?.homeroomclassid) ??
+    rows[0]
   const unscored = rows.filter((s) => s.entries === 0).length
 
   const error = picker.error ?? weekly.error
@@ -591,11 +633,13 @@ export function ScoringView() {
         <Card className="py-0">
           <EmptyState
             title="Chưa có năm học"
-            description="Tạo năm học để sinh các tuần trước khi chấm điểm."
+            description={isAdmin ? "Tạo năm học để sinh các tuần trước khi chấm điểm." : undefined}
             action={
-              <Button asChild>
-                <Link href="/nam-hoc">Tạo năm học</Link>
-              </Button>
+              isAdmin && (
+                <Button asChild>
+                  <Link href="/nam-hoc">Tạo năm học</Link>
+                </Button>
+              )
             }
           />
         </Card>
@@ -604,63 +648,80 @@ export function ScoringView() {
           <EmptyState title="Năm học chưa có tuần" />
         </Card>
       ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-[300px_1fr]">
-          <Card className="gap-0 py-0">
-            <div className="flex flex-col gap-2 border-b border-border/70 p-3">
-              <ScopeFilter value={scope} onChange={setScope} />
-              <p className="text-xs text-muted-foreground">
-                {rows.length} lớp
-                {unscored > 0 && <span className="text-amber-700"> · {unscored} lớp chưa chấm</span>}
-              </p>
-            </div>
-            {weekly.isLoading ? (
-              <TableSkeleton rows={6} />
-            ) : rows.length === 0 ? (
-              <EmptyState title="Không có lớp phù hợp" />
-            ) : (
-              <ul className="max-h-[70vh] divide-y divide-border/70 overflow-y-auto">
-                {rows.map((s) => {
-                  const active = s.classid === selected?.classid
-                  return (
-                    <li key={s.classid}>
-                      <button
-                        type="button"
-                        onClick={() => setClassId(s.classid)}
-                        aria-current={active ? "true" : undefined}
-                        className={cn(
-                          "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-primary/5",
-                          active && "bg-primary/10"
-                        )}
-                      >
-                        <ClassName name={s.classname} />
-                        <span className="min-w-0 flex-1">
-                          <TeacherName name={s.teachername} className="block truncate text-sm" />
-                          {s.entries === 0 ? (
-                            <span className="text-xs text-amber-700">Chưa chấm</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">{s.entries} lượt</span>
-                          )}
-                        </span>
-                        <span className="text-right">
-                          <span className="block font-semibold tabular-nums">{s.total}</span>
-                          <span className="text-xs text-muted-foreground">hạng {s.rank}</span>
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </Card>
-
-          {selected ? (
-            <ClassPanel week={week} score={selected} />
-          ) : (
-            <Card className="py-0">
-              <EmptyState title="Chọn một lớp để chấm điểm" />
+        <>
+          {noClass && (
+            <Card className="mb-4 flex-row items-center gap-3 border-amber-500/30 bg-amber-50/70 px-4 py-3 text-sm text-amber-800">
+              <Info className="size-4 shrink-0" />
+              {NO_CLASS_MESSAGE}
             </Card>
           )}
-        </div>
+          <div className="grid items-start gap-4 lg:grid-cols-[300px_1fr]">
+            <Card className="gap-0 py-0">
+              <div className="flex flex-col gap-2 border-b border-border/70 p-3">
+                <ScopeFilter value={scope} onChange={setScope} />
+                {isCodo && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={onlyMine} onCheckedChange={(v) => setOnlyMine(v === true)} />
+                    Chỉ lớp tôi được chấm
+                  </label>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {rows.length} lớp
+                  {unscored > 0 && <span className="text-amber-700"> · {unscored} lớp chưa chấm</span>}
+                </p>
+              </div>
+              {weekly.isLoading ? (
+                <TableSkeleton rows={6} />
+              ) : rows.length === 0 ? (
+                <EmptyState
+                  title="Không có lớp phù hợp"
+                  description={filterMine ? "Bỏ chọn “Chỉ lớp tôi được chấm” để xem bảng điểm các lớp khác." : undefined}
+                />
+              ) : (
+                <ul className="max-h-[70vh] divide-y divide-border/70 overflow-y-auto">
+                  {rows.map((s) => {
+                    const active = s.classid === selected?.classid
+                    return (
+                      <li key={s.classid}>
+                        <button
+                          type="button"
+                          onClick={() => setClassId(s.classid)}
+                          aria-current={active ? "true" : undefined}
+                          className={cn(
+                            "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-primary/5",
+                            active && "bg-primary/10"
+                          )}
+                        >
+                          <ClassName name={s.classname} />
+                          <span className="min-w-0 flex-1">
+                            <TeacherName name={s.teachername} className="block truncate text-sm" />
+                            {s.entries === 0 ? (
+                              <span className="text-xs text-amber-700">Chưa chấm</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">{s.entries} lượt</span>
+                            )}
+                          </span>
+                          <span className="text-right">
+                            <span className="block font-semibold tabular-nums">{s.total}</span>
+                            <span className="text-xs text-muted-foreground">hạng {s.rank}</span>
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </Card>
+
+            {selected ? (
+              <ClassPanel week={week} score={selected} />
+            ) : (
+              <Card className="py-0">
+                <EmptyState title="Chọn một lớp để chấm điểm" />
+              </Card>
+            )}
+          </div>
+        </>
       )}
     </>
   )

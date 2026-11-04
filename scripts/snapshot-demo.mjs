@@ -1,6 +1,9 @@
 // Chụp dữ liệu từ BE đang chạy thành file tĩnh cho bản demo (NEXT_PUBLIC_DEMO_MODE=true).
 // Chạy: npm run snapshot:demo (BE ở NEXT_PUBLIC_API_URL hoặc http://localhost:3001)
-// Chỉ gọi GET, theo đúng các key SWR trong src/hooks/use-data.ts.
+// BE bắt buộc đăng nhập: cần biến môi trường SNAPSHOT_USERNAME, SNAPSHOT_PASSWORD của một tài khoản admin
+// để đọc được mọi dữ liệu. Bản demo không đăng nhập: người xem có quyền admin (DEMO_VIEWER trong src/lib/api.ts),
+// nên không chụp /auth/me. Có chụp /accounts cho trang Tài khoản (không có mật khẩu, nhưng lộ tên đăng nhập).
+// Ngoài POST /auth/login chỉ gọi GET, theo đúng các key SWR trong src/hooks/use-data.ts.
 import { mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
@@ -21,11 +24,32 @@ const toQuery = (params) => {
   return query.toString()
 }
 
+const { SNAPSHOT_USERNAME, SNAPSHOT_PASSWORD } = process.env
+if (!SNAPSHOT_USERNAME || !SNAPSHOT_PASSWORD) {
+  throw new Error("Thiếu SNAPSHOT_USERNAME / SNAPSHOT_PASSWORD (tài khoản admin) để đăng nhập BE")
+}
+
+async function login() {
+  const res = await fetch(`${API_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: SNAPSHOT_USERNAME, password: SNAPSHOT_PASSWORD }),
+  }).catch(() => null)
+  const body = await res?.json().catch(() => null)
+  if (!res?.ok || !body?.success) {
+    throw new Error(`Không đăng nhập được BE ${API_URL}: ${body?.message ?? "không kết nối được"}`)
+  }
+  if (body.data.account.kind !== "admin") throw new Error("Tài khoản chụp snapshot phải là admin")
+  return body.data.token
+}
+
+const token = await login()
+
 let saved = 0
 let bytes = 0
 
 async function snapshot(p) {
-  const res = await fetch(`${API_URL}${p}`)
+  const res = await fetch(`${API_URL}${p}`, { headers: { Authorization: `Bearer ${token}` } })
   const body = await res.json().catch(() => null)
   const content = JSON.stringify({ status: res.status, body })
   await writeFile(path.join(OUT_DIR, demoFile(p)), content)
@@ -51,7 +75,7 @@ const [branches, grades, classes, schoolYears] = await Promise.all(
 if (!branches || !grades || !classes || !schoolYears) {
   throw new Error(`Không đọc được dữ liệu từ ${API_URL}; kiểm tra BE đang chạy`)
 }
-await snapshotAll(["/teachers", "/weeks/current"])
+await snapshotAll(["/teachers", "/weeks/current", "/accounts"])
 
 // Phạm vi lọc phân hiệu/khối của trang xếp hạng, học sinh
 const scopes = [{}]

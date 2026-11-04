@@ -3,6 +3,7 @@
 import useSWR from "swr"
 import { ApiError, fetcher } from "@/lib/api"
 import type {
+  Account,
   Branch,
   ClassDetail,
   ClassItem,
@@ -19,6 +20,15 @@ import type {
   Week,
   WeeklyScore,
 } from "@/lib/types"
+
+// Tài khoản đang đăng nhập; 401 đã được api() chuyển về trang đăng nhập nên không thử lại
+export const useMe = () =>
+  useSWR<Account>("/auth/me", fetcher, {
+    shouldRetryOnError: (err) => !(err instanceof ApiError && err.status === 401),
+  })
+
+// Chỉ admin gọi được (BE trả 403 với tài khoản khác)
+export const useAccounts = () => useSWR<Account[]>("/accounts", fetcher)
 
 // Dữ liệu nhỏ (vài chục bản ghi) nên tải toàn bộ, lọc ở client
 export const useBranches = () => useSWR<Branch[]>("/branches", fetcher)

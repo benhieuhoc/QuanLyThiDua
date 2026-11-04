@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react"
 import { Pencil, Plus, Search } from "lucide-react"
 import { apiDelete, apiPost, apiPut } from "@/lib/api"
+import { isAdmin } from "@/lib/auth"
 import type { Branch, Teacher } from "@/lib/types"
-import { useBranches, useTeachers } from "@/hooks/use-data"
+import { useBranches, useTeachers, useMe } from "@/hooks/use-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -186,6 +187,8 @@ export function TeachersView() {
   const [branchFilter, setBranchFilter] = useState("all")
   const [status, setStatus] = useState("all")
   const [query, setQuery] = useState("")
+  // Chỉ admin được thêm / sửa / xóa (BE trả 403 với tài khoản khác)
+  const canEdit = isAdmin(useMe().data)
 
   const branchById = useMemo(() => new Map(branches.data?.map((b) => [b.id, b])), [branches.data])
 
@@ -201,7 +204,7 @@ export function TeachersView() {
       <PageHeader
         title="Giáo viên"
         description="Mỗi giáo viên thuộc một phân hiệu và chủ nhiệm tối đa một lớp."
-        actions={<CreateTeachersDialog branches={branches.data ?? []} />}
+        actions={canEdit && <CreateTeachersDialog branches={branches.data ?? []} />}
       />
 
       <Card className="gap-0 py-0">
@@ -241,7 +244,7 @@ export function TeachersView() {
         ) : rows.length === 0 ? (
           <EmptyState
             title={teachers.data?.length ? "Không có giáo viên phù hợp" : "Chưa có giáo viên"}
-            description={teachers.data?.length ? "Thử đổi bộ lọc hoặc từ khóa." : "Thêm giáo viên cho từng phân hiệu."}
+            description={teachers.data?.length ? "Thử đổi bộ lọc hoặc từ khóa." : canEdit ? "Thêm giáo viên cho từng phân hiệu." : undefined}
           />
         ) : (
           <Table>
@@ -250,7 +253,7 @@ export function TeachersView() {
                 <TableHead className="pl-4">Họ tên</TableHead>
                 <TableHead>Phân hiệu</TableHead>
                 <TableHead>Lớp chủ nhiệm</TableHead>
-                <TableHead className="w-24 pr-4" />
+                {canEdit && <TableHead className="w-24 pr-4" />}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -265,20 +268,22 @@ export function TeachersView() {
                       <Badge variant="outline" className="text-muted-foreground">Chưa chủ nhiệm</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="pr-4">
-                    <div className="flex justify-end gap-1">
-                      <EditTeacherDialog teacher={t} branches={branches.data ?? []} />
-                      <ConfirmDelete
-                        title={`Xóa giáo viên ${t.name}?`}
-                        description={
-                          t.classname
-                            ? `Giáo viên đang chủ nhiệm lớp ${t.classname}, cần đổi chủ nhiệm trước khi xóa.`
-                            : "Thao tác này không thể hoàn tác."
-                        }
-                        onConfirm={() => apiDelete(`/teachers/${t.id}`)}
-                      />
-                    </div>
-                  </TableCell>
+                  {canEdit && (
+                    <TableCell className="pr-4">
+                      <div className="flex justify-end gap-1">
+                        <EditTeacherDialog teacher={t} branches={branches.data ?? []} />
+                        <ConfirmDelete
+                          title={`Xóa giáo viên ${t.name}?`}
+                          description={
+                            t.classname
+                              ? `Giáo viên đang chủ nhiệm lớp ${t.classname}, cần đổi chủ nhiệm trước khi xóa.`
+                              : "Thao tác này không thể hoàn tác."
+                          }
+                          onConfirm={() => apiDelete(`/teachers/${t.id}`)}
+                        />
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

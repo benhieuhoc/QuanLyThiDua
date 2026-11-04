@@ -4,9 +4,10 @@ import { useState } from "react"
 import { Pencil, Plus, SlidersHorizontal } from "lucide-react"
 import { apiDelete, apiPost, apiPut } from "@/lib/api"
 import { formatDate, formatRange } from "@/lib/format"
+import { isAdmin } from "@/lib/auth"
 import type { SchoolYear, Week } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { useSchoolYears, useWeeks } from "@/hooks/use-data"
+import { useSchoolYears, useWeeks, useMe } from "@/hooks/use-data"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -350,6 +351,8 @@ function EditWeekBaseDialog({ week }: { week: Week }) {
 
 function WeeksTable({ year }: { year: SchoolYear }) {
   const weeks = useWeeks(year.id)
+  // Chỉ admin được sửa điểm gốc, khóa tuần
+  const canEdit = isAdmin(useMe().data)
 
   if (weeks.error) return <ErrorState error={weeks.error} onRetry={() => weeks.mutate()} />
   if (weeks.isLoading) return <TableSkeleton rows={8} />
@@ -365,7 +368,7 @@ function WeeksTable({ year }: { year: SchoolYear }) {
           <TableHead className="text-right">Gốc Học tập</TableHead>
           <TableHead className="hidden text-right sm:table-cell">Lượt chấm</TableHead>
           <TableHead>Trạng thái</TableHead>
-          <TableHead className="pr-4" />
+          {canEdit && <TableHead className="pr-4" />}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -379,12 +382,14 @@ function WeeksTable({ year }: { year: SchoolYear }) {
             <TableCell>
               <WeekStatus week={w} />
             </TableCell>
-            <TableCell className="pr-4">
-              <div className="flex justify-end gap-1">
-                <EditWeekBaseDialog week={w} />
-                <LockWeekButton week={w} />
-              </div>
-            </TableCell>
+            {canEdit && (
+              <TableCell className="pr-4">
+                <div className="flex justify-end gap-1">
+                  <EditWeekBaseDialog week={w} />
+                  <LockWeekButton week={w} />
+                </div>
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>
@@ -396,13 +401,19 @@ export function SchoolYearsView() {
   const years = useSchoolYears()
   const [yearId, setYearId] = useState<number>()
   const selected = years.data?.find((y) => y.id === yearId) ?? years.data?.[0]
+  // Chỉ admin được tạo / sửa / xóa năm học
+  const canEdit = isAdmin(useMe().data)
 
   return (
     <>
       <PageHeader
         title="Năm học & tuần"
-        description="Tạo năm học, đặt điểm gốc từng tuần và khóa tuần đã chấm xong."
-        actions={<CreateSchoolYearDialog />}
+        description={
+          canEdit
+            ? "Tạo năm học, đặt điểm gốc từng tuần và khóa tuần đã chấm xong."
+            : "Các năm học, điểm gốc và trạng thái khóa của từng tuần."
+        }
+        actions={canEdit && <CreateSchoolYearDialog />}
       />
 
       {years.error ? (
@@ -415,7 +426,10 @@ export function SchoolYearsView() {
         </Card>
       ) : !years.data?.length || !selected ? (
         <Card className="py-0">
-          <EmptyState title="Chưa có năm học" description="Tạo năm học đầu tiên để bắt đầu chấm điểm thi đua." />
+          <EmptyState
+            title="Chưa có năm học"
+            description={canEdit ? "Tạo năm học đầu tiên để bắt đầu chấm điểm thi đua." : undefined}
+          />
         </Card>
       ) : (
         <div className="grid items-start gap-4 lg:grid-cols-[280px_1fr]">
@@ -437,12 +451,16 @@ export function SchoolYearsView() {
                       HK1: tuần 1–{y.semester2_week - 1} · HK2: tuần {y.semester2_week}–{y.numweeks}
                     </p>
                   </button>
-                  <EditSchoolYearDialog year={y} />
-                  <ConfirmDelete
-                    title={`Xóa năm học ${y.name}?`}
-                    description="Xóa cả các tuần của năm học. Chỉ xóa được khi chưa có điểm thi đua."
-                    onConfirm={() => apiDelete(`/school-years/${y.id}`)}
-                  />
+                  {canEdit && (
+                    <>
+                      <EditSchoolYearDialog year={y} />
+                      <ConfirmDelete
+                        title={`Xóa năm học ${y.name}?`}
+                        description="Xóa cả các tuần của năm học. Chỉ xóa được khi chưa có điểm thi đua."
+                        onConfirm={() => apiDelete(`/school-years/${y.id}`)}
+                      />
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
@@ -452,7 +470,7 @@ export function SchoolYearsView() {
             <div className="border-b border-border/70 px-4 py-3">
               <p className="font-medium">Các tuần năm học {selected.name}</p>
               <p className="text-xs text-muted-foreground">
-                Tuần đã khóa không thể chấm thêm hay đổi điểm gốc. Mở khóa để sửa.
+                Tuần đã khóa không thể chấm thêm hay đổi điểm gốc.{canEdit && " Mở khóa để sửa."}
               </p>
             </div>
             <WeeksTable year={selected} />

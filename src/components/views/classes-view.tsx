@@ -3,9 +3,10 @@
 import { useState } from "react"
 import { Minus, Plus, UserRoundPen } from "lucide-react"
 import { apiDelete, apiPost, apiPut } from "@/lib/api"
+import { isAdmin } from "@/lib/auth"
 import type { Branch, ClassItem, Grade, Teacher } from "@/lib/types"
 import { formatDate } from "@/lib/format"
-import { useBranches, useClass, useClasses, useGrades, useTeachers } from "@/hooks/use-data"
+import { useBranches, useClass, useClasses, useGrades, useTeachers, useMe } from "@/hooks/use-data"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -342,6 +343,8 @@ export function ClassesView() {
   const [branchFilter, setBranchFilter] = useState("all")
   const [gradeFilter, setGradeFilter] = useState("all")
   const [detailClass, setDetailClass] = useState<number>()
+  // Chỉ admin được tạo lớp, đổi GVCN, xóa lớp (BE trả 403 với tài khoản khác)
+  const canEdit = isAdmin(useMe().data)
 
   const rows = (classes.data ?? []).filter(
     (c) =>
@@ -355,12 +358,14 @@ export function ClassesView() {
         title="Lớp học"
         description="Tên lớp gồm khối, mã phân hiệu và số thứ tự, ví dụ 6A1."
         actions={
-          <CreateClassesDialog
-            grades={grades.data ?? []}
-            branches={branches.data ?? []}
-            teachers={teachers.data ?? []}
-            classes={classes.data ?? []}
-          />
+          canEdit && (
+            <CreateClassesDialog
+              grades={grades.data ?? []}
+              branches={branches.data ?? []}
+              teachers={teachers.data ?? []}
+              classes={classes.data ?? []}
+            />
+          )
         }
       />
 
@@ -399,7 +404,11 @@ export function ClassesView() {
           <EmptyState
             title={classes.data?.length ? "Không có lớp phù hợp" : "Chưa có lớp"}
             description={
-              classes.data?.length ? "Thử đổi bộ lọc." : "Tạo lớp, có thể chọn giáo viên chủ nhiệm ngay hoặc phân công sau."
+              classes.data?.length
+                ? "Thử đổi bộ lọc."
+                : canEdit
+                  ? "Tạo lớp, có thể chọn giáo viên chủ nhiệm ngay hoặc phân công sau."
+                  : undefined
             }
           />
         ) : (
@@ -411,7 +420,7 @@ export function ClassesView() {
                 <TableHead>Phân hiệu</TableHead>
                 <TableHead>Giáo viên chủ nhiệm</TableHead>
                 <TableHead className="text-right">Sĩ số</TableHead>
-                <TableHead className="w-24 pr-4" />
+                {canEdit && <TableHead className="w-24 pr-4" />}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -431,16 +440,18 @@ export function ClassesView() {
                   <TableCell className="text-muted-foreground">{c.branchname}</TableCell>
                   <TableCell className="font-medium"><TeacherName name={c.teachername} /></TableCell>
                   <TableCell className="text-right tabular-nums">{c.numstudents}</TableCell>
-                  <TableCell className="pr-4">
-                    <div className="flex justify-end gap-1">
-                      <ChangeTeacherDialog cls={c} teachers={teachers.data ?? []} />
-                      <ConfirmDelete
-                        title={`Xóa lớp ${c.name}?`}
-                        description="Chỉ xóa được lớp chưa có học sinh và chưa có điểm thi đua. Lớp tạo sau sẽ lấy số tiếp theo lớp lớn nhất còn lại."
-                        onConfirm={() => apiDelete(`/classes/${c.id}`)}
-                      />
-                    </div>
-                  </TableCell>
+                  {canEdit && (
+                    <TableCell className="pr-4">
+                      <div className="flex justify-end gap-1">
+                        <ChangeTeacherDialog cls={c} teachers={teachers.data ?? []} />
+                        <ConfirmDelete
+                          title={`Xóa lớp ${c.name}?`}
+                          description="Chỉ xóa được lớp chưa có học sinh và chưa có điểm thi đua. Lớp tạo sau sẽ lấy số tiếp theo lớp lớn nhất còn lại."
+                          onConfirm={() => apiDelete(`/classes/${c.id}`)}
+                        />
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

@@ -112,6 +112,11 @@ export type Point = {
   locked: boolean
   // Luôn là mảng, rỗng nếu không gắn học sinh
   students: PointStudent[]
+  // Tài khoản nhập; null khi nhập trước khi có đăng nhập hoặc tài khoản đã bị xóa
+  accountid: number | null
+  accountusername: string | null
+  // GVCN của lớp
+  classteacherid: number | null
   created_at: string
   updated_at: string
 }
@@ -229,5 +234,36 @@ export type ClassScore = {
   schoolyear: SchoolYear
   weeks: (Score & { startdate: string; enddate: string })[]
 }
+
+// Tài khoản (GET /auth/me, GET /accounts). role "user" gồm GVCN (gắn teacherid) và cờ đỏ (gắn studentid)
+export type Role = "admin" | "user"
+export type AccountKind = "admin" | "gvcn" | "codo"
+
+export type Account = {
+  id: number
+  username: string
+  role: Role
+  kind: AccountKind
+  active: boolean
+  // Admin / GVCN
+  teacherid: number | null
+  teachername: string | null
+  // GVCN: lớp chủ nhiệm, null nếu chưa được phân lớp
+  homeroomclassid: number | null
+  homeroomclassname: string | null
+  // Cờ đỏ
+  studentid: number | null
+  studentcode: string | null
+  studentname: string | null
+  // Cờ đỏ: lớp của chính em đó (không được chấm)
+  studentclassid: number | null
+  studentclassname: string | null
+  // Cờ đỏ: lớp được phân công chấm; [] với admin / GVCN
+  classes: { id: number; name: string }[]
+  created_at: string
+  updated_at: string
+}
+
+export type LoginResult = { token: string; account: Account }
 
 export type FieldError ={ field?: string; message: string; [key: string]: unknown }

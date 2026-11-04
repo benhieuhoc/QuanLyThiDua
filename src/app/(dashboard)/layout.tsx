@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/layout/app-header"
+import { AuthGuard } from "@/components/layout/auth-guard"
 import { Brand, SidebarNav } from "@/components/layout/sidebar-nav"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -19,7 +20,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <div className="flex min-h-screen flex-col md:pl-64">
         <AppHeader />
-        <main className="mx-auto w-full max-w-7xl flex-1 p-4 md:p-6">{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 p-4 md:p-6">
+          <AuthGuard>{children}</AuthGuard>
+        </main>
       </div>
     </div>
   )
