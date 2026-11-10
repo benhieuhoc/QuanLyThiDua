@@ -158,6 +158,55 @@ export const apiPut = <T>(path: string, data: unknown) =>
 
 export const apiDelete = <T>(path: string) => api<T>(path, { method: "DELETE" })
 
+// Tên file từ Content-Disposition (BE gửi cả filename* UTF-8 và filename ASCII)
+function downloadName(disposition: string | null, fallback: string) {
+  const match = /filename\*=UTF-8''([^;]+)/i.exec(disposition ?? "") ?? /filename="([^"]+)"/i.exec(disposition ?? "")
+  if (!match) return fallback
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return match[1]
+  }
+}
+
+// Tải file từ BE (vd. Excel /scores/export). Không dùng <a href> được vì cần header Authorization;
+// lỗi BE vẫn là JSON { success, message } nên ném ApiError như api()
+export async function apiDownload(path: string, fallbackName = "download.xlsx") {
+  if (DEMO_MODE) throw new ApiError("Bản demo không hỗ trợ tải file", 403)
+  const token = getToken()
+  if (!token) {
+    redirectToLogin()
+    throw new ApiError(UNAUTHORIZED, 401)
+  }
+
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } })
+  } catch {
+    throw new ApiError(`Không kết nối được máy chủ (${API_URL})`, 0)
+  }
+  if (!res.ok) {
+    const body: ApiBody = await res.json().catch(() => null)
+    if (res.status === 401) {
+      clearToken()
+      redirectToLogin()
+    }
+    throw new ApiError(body?.message ?? "Không tải được file", res.status, body?.errors)
+  }
+
+  const filename = downloadName(res.headers.get("Content-Disposition"), fallbackName)
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  // Thu hồi sau khi trình duyệt đã bắt đầu tải
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+  return filename
+}
+
 // POST /auth/login → lưu token; 401 sai tài khoản / mật khẩu, 403 tài khoản bị khóa
 export async function login(username: string, password: string) {
   const result = await apiPost<LoginResult>("/auth/login", { username, password })

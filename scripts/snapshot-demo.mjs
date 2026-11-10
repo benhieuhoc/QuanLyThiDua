@@ -76,6 +76,9 @@ if (!branches || !grades || !classes || !schoolYears) {
   throw new Error(`Không đọc được dữ liệu từ ${API_URL}; kiểm tra BE đang chạy`)
 }
 await snapshotAll(["/teachers", "/weeks/current", "/accounts"])
+// Trang Lớp học, mục "Đã ra trường": danh sách + dialog học sinh của từng lớp lưu trữ
+const archivedClasses = (await snapshot("/classes?archived=true")) ?? []
+await snapshotAll(archivedClasses.map((c) => `/classes/${c.id}`))
 
 // Phạm vi lọc phân hiệu/khối của trang xếp hạng, học sinh
 const scopes = [{}]
@@ -113,6 +116,8 @@ for (const year of schoolYears) {
       ...[...started].map((n) => ({ week: n })),
       ...periods.months.filter((m) => started.has(m.fromweek)).map((m) => ({ month: m.value })),
       ...periods.semesters.filter((s) => started.has(s.fromweek)).map((s) => ({ semester: s.value })),
+      // Tab "Cả năm" (year=1)
+      ...(started.size > 0 ? [{ year: 1 }] : []),
     ]
     for (const range of ranges) {
       for (const scope of scopes) paths.push(`/scores/ranking?${toQuery({ schoolyearid: year.id, ...range, ...scope })}`)

@@ -34,7 +34,11 @@ export const useAccounts = () => useSWR<Account[]>("/accounts", fetcher)
 export const useBranches = () => useSWR<Branch[]>("/branches", fetcher)
 export const useGrades = () => useSWR<Grade[]>("/grades", fetcher)
 export const useTeachers = () => useSWR<Teacher[]>("/teachers", fetcher)
+// Mặc định BE chỉ trả lớp đang học
 export const useClasses = () => useSWR<ClassItem[]>("/classes", fetcher)
+// Lớp đã ra trường, năm ra trường mới nhất trước; key null khi chưa cần xem
+export const useArchivedClasses = (enabled = true) =>
+  useSWR<ClassItem[]>(enabled ? "/classes?archived=true" : null, fetcher)
 
 export const useClass = (id?: number) => useSWR<ClassDetail>(id ? `/classes/${id}` : null, fetcher)
 
@@ -80,14 +84,17 @@ export const useSummaryScore = (schoolyearid?: number, fromweek?: number, toweek
 export const useScorePeriods = (schoolyearid?: number) =>
   useSWR<ScorePeriods>(schoolyearid ? `/scores/periods?schoolyearid=${schoolyearid}` : null, fetcher)
 
+// Cả năm học: { type: "year", value: 1 }
 export type RankingPeriod = { type: PeriodType; value: number | string }
+
+// Query dùng chung cho /scores/ranking và /scores/export (xuất Excel đúng bộ lọc đang xem)
+export const rankingQuery = (schoolyearid: number, period: RankingPeriod, scope: ScoreScope = {}) =>
+  toQuery({ schoolyearid, [period.type]: period.value, ...scope })
 
 // 409 (khoảng chưa bắt đầu) và lỗi 4xx khác là kết quả xác định, không cần thử lại
 export const useRanking = (schoolyearid?: number, period?: RankingPeriod, scope: ScoreScope = {}) =>
   useSWR<Ranking>(
-    schoolyearid && period
-      ? `/scores/ranking?${toQuery({ schoolyearid, [period.type]: period.value, ...scope })}`
-      : null,
+    schoolyearid && period ? `/scores/ranking?${rankingQuery(schoolyearid, period, scope)}` : null,
     fetcher,
     { shouldRetryOnError: (err) => !(err instanceof ApiError && err.status >= 400 && err.status < 500) }
   )

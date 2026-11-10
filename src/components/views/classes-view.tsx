@@ -6,7 +6,7 @@ import { apiDelete, apiPost, apiPut } from "@/lib/api"
 import { isAdmin } from "@/lib/auth"
 import type { Branch, ClassItem, Grade, Teacher } from "@/lib/types"
 import { formatDate } from "@/lib/format"
-import { useBranches, useClass, useClasses, useGrades, useTeachers, useMe } from "@/hooks/use-data"
+import { useArchivedClasses, useBranches, useClass, useClasses, useGrades, useTeachers, useMe } from "@/hooks/use-data"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -291,9 +291,11 @@ function ClassStudentsDialog({ classid, onOpenChange }: { classid?: number; onOp
         <DialogHeader>
           <DialogTitle>{data ? `Lớp ${data.name}` : "Danh sách học sinh"}</DialogTitle>
           <DialogDescription>
-            {data
-              ? `${data.teachername ? `GVCN ${data.teachername}` : "Chưa có GVCN"} · sĩ số ${data.numstudents}`
-              : "Học sinh của lớp"}
+            {!data
+              ? "Học sinh của lớp"
+              : data.archivedyearid !== null
+                ? `Đã ra trường (năm học ${data.archivedyearname}) · sĩ số ${data.numstudents} · chỉ xem`
+                : `${data.teachername ? `GVCN ${data.teachername}` : "Chưa có GVCN"} · sĩ số ${data.numstudents}`}
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto">
@@ -302,7 +304,10 @@ function ClassStudentsDialog({ classid, onOpenChange }: { classid?: number; onOp
           ) : !data ? (
             <TableSkeleton rows={6} />
           ) : data.students.length === 0 ? (
-            <EmptyState title="Lớp chưa có học sinh" description="Thêm học sinh trong mục Học sinh." />
+            <EmptyState
+              title="Lớp chưa có học sinh"
+              description={data.archivedyearid === null ? "Thêm học sinh trong mục Học sinh." : undefined}
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -335,16 +340,24 @@ function ClassStudentsDialog({ classid, onOpenChange }: { classid?: number; onOp
   )
 }
 
+type ClassStatus = "active" | "archived"
+
 export function ClassesView() {
   const branches = useBranches()
   const grades = useGrades()
   const teachers = useTeachers()
-  const classes = useClasses()
+  const activeClasses = useClasses()
+  const [status, setStatus] = useState<ClassStatus>("active")
+  // Chỉ tải lớp ra trường khi chuyển sang xem
+  const archivedClasses = useArchivedClasses(status === "archived")
+  const archived = status === "archived"
+  const classes = archived ? archivedClasses : activeClasses
   const [branchFilter, setBranchFilter] = useState("all")
   const [gradeFilter, setGradeFilter] = useState("all")
   const [detailClass, setDetailClass] = useState<number>()
-  // Chỉ admin được tạo lớp, đổi GVCN, xóa lớp (BE trả 403 với tài khoản khác)
-  const canEdit = isAdmin(useMe().data)
+  // Chỉ admin được tạo lớp, đổi GVCN, xóa lớp (BE trả 403 với tài khoản khác); lớp ra trường chỉ xem
+  const isAdminUser = isAdmin(useMe().data)
+  const canEdit = isAdminUser && !archived
 
   const rows = (classes.data ?? []).filter(
     (c) =>
@@ -356,14 +369,18 @@ export function ClassesView() {
     <>
       <PageHeader
         title="Lớp học"
-        description="Tên lớp gồm khối, mã phân hiệu và số thứ tự, ví dụ 6A1."
+        description={
+          archived
+            ? "Lớp khối 9 ra trường khi chuyển năm học. Chỉ xem lớp và học sinh; bảng điểm năm cũ vẫn giữ tên lớp lúc đó."
+            : "Tên lớp gồm khối, mã phân hiệu và số thứ tự, ví dụ 6A1."
+        }
         actions={
-          canEdit && (
+          isAdminUser && (
             <CreateClassesDialog
               grades={grades.data ?? []}
               branches={branches.data ?? []}
               teachers={teachers.data ?? []}
-              classes={classes.data ?? []}
+              classes={activeClasses.data ?? []}
             />
           )
         }
@@ -371,6 +388,25 @@ export function ClassesView() {
 
       <Card className="gap-0 py-0">
         <div className="flex flex-col gap-2 border-b border-border/70 p-3 sm:flex-row sm:items-center">
+          <div className="flex rounded-lg border border-border bg-white/70 p-0.5" role="group" aria-label="Trạng thái lớp">
+            {(
+              [
+                ["active", "Đang học"],
+                ["archived", "Đã ra trường"],
+              ] as const
+            ).map(([value, label]) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={status === value ? "default" : "ghost"}
+                aria-pressed={status === value}
+                onClick={() => setStatus(value)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
           <Select value={branchFilter} onValueChange={setBranchFilter}>
             <SelectTrigger className="bg-white/70 sm:w-48">
               <SelectValue />
@@ -402,13 +438,15 @@ export function ClassesView() {
           <TableSkeleton />
         ) : rows.length === 0 ? (
           <EmptyState
-            title={classes.data?.length ? "Không có lớp phù hợp" : "Chưa có lớp"}
+            title={classes.data?.length ? "Không có lớp phù hợp" : archived ? "Chưa có lớp ra trường" : "Chưa có lớp"}
             description={
               classes.data?.length
                 ? "Thử đổi bộ lọc."
-                : canEdit
-                  ? "Tạo lớp, có thể chọn giáo viên chủ nhiệm ngay hoặc phân công sau."
-                  : undefined
+                : archived
+                  ? "Lớp khối 9 được lưu trữ ở đây khi tạo năm học mới."
+                  : canEdit
+                    ? "Tạo lớp, có thể chọn giáo viên chủ nhiệm ngay hoặc phân công sau."
+                    : undefined
             }
           />
         ) : (
@@ -418,7 +456,7 @@ export function ClassesView() {
                 <TableHead className="pl-4">Lớp</TableHead>
                 <TableHead>Khối</TableHead>
                 <TableHead>Phân hiệu</TableHead>
-                <TableHead>Giáo viên chủ nhiệm</TableHead>
+                <TableHead>{archived ? "Ra trường" : "Giáo viên chủ nhiệm"}</TableHead>
                 <TableHead className="text-right">Sĩ số</TableHead>
                 {canEdit && <TableHead className="w-24 pr-4" />}
               </TableRow>
@@ -438,7 +476,13 @@ export function ClassesView() {
                   </TableCell>
                   <TableCell>Khối {c.numgrade}</TableCell>
                   <TableCell className="text-muted-foreground">{c.branchname}</TableCell>
-                  <TableCell className="font-medium"><TeacherName name={c.teachername} /></TableCell>
+                  <TableCell className="font-medium">
+                    {c.archivedyearid !== null ? (
+                      <Badge variant="secondary">Năm học {c.archivedyearname}</Badge>
+                    ) : (
+                      <TeacherName name={c.teachername} />
+                    )}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{c.numstudents}</TableCell>
                   {canEdit && (
                     <TableCell className="pr-4">

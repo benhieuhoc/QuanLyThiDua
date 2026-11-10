@@ -1,11 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { CalendarClock } from "lucide-react"
-import { ApiError } from "@/lib/api"
+import { CalendarClock, FileDown } from "lucide-react"
+import { toast } from "sonner"
+import { ApiError, DEMO_MODE, apiDownload, errorMessage } from "@/lib/api"
 import { formatDate, formatRange } from "@/lib/format"
 import type { PeriodRange, PeriodType, RankingRow, SummaryRow } from "@/lib/types"
-import { useRanking, useScorePeriods, useSummaryScore, type ScoreScope } from "@/hooks/use-data"
+import { rankingQuery, useRanking, useScorePeriods, useSummaryScore, type ScoreScope } from "@/hooks/use-data"
 import { useWeekPicker, type WeekPicker } from "@/hooks/use-week-picker"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -22,8 +23,36 @@ const MODES: { value: Mode; label: string }[] = [
   { value: "week", label: "Tuần" },
   { value: "month", label: "Tháng" },
   { value: "semester", label: "Học kỳ" },
+  { value: "year", label: "Cả năm" },
   { value: "range", label: "Khoảng tuần" },
 ]
+
+// Tải Excel bảng xếp hạng đúng khoảng + phạm vi lọc đang xem (GET /scores/export, query như /scores/ranking)
+function ExportButton({ path, disabled }: { path?: string; disabled: boolean }) {
+  const [pending, setPending] = useState(false)
+  // Bản demo không có BE để tạo file
+  if (DEMO_MODE) return null
+
+  const download = async () => {
+    if (!path) return
+    setPending(true)
+    try {
+      const filename = await apiDownload(path, "diem-thi-dua.xlsx")
+      toast.success(`Đã tải ${filename}`)
+    } catch (err) {
+      const { title, description } = errorMessage(err)
+      toast.error(title, { description })
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <Button type="button" variant="outline" onClick={download} disabled={disabled || !path || pending} className="sm:ml-auto">
+      <FileDown /> {pending ? "Đang tải..." : "Tải Excel"}
+    </Button>
+  )
+}
 
 function ModeTabs({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
   return (
@@ -114,7 +143,7 @@ type PanelProps = {
 
 type PeriodOption = { value: string; label: string; started: boolean }
 
-// Xếp hạng theo tuần / tháng / học kỳ; mặc định là khoảng đã bắt đầu gần nhất
+// Xếp hạng theo tuần / tháng / học kỳ / cả năm; mặc định là khoảng đã bắt đầu gần nhất
 function PeriodRanking({ type, picker, tabs, scope, onScopeChange, onSelect }: PanelProps & { type: PeriodType }) {
   const periods = useScorePeriods(picker.schoolyearid)
   // Lựa chọn chỉ có hiệu lực với đúng năm học và loại khoảng đã chọn
@@ -132,40 +161,52 @@ function PeriodRanking({ type, picker, tabs, scope, onScopeChange, onSelect }: P
       ? weeks.map((w) => ({ value: String(w.numweek), label: `Tuần ${w.numweek} · ${formatRange(w.startdate, w.enddate)}`, started: w.started }))
       : type === "month"
         ? (periods.data?.months ?? []).map(rangeOption)
-        : (periods.data?.semesters ?? []).map(rangeOption)
+        : type === "semester"
+          ? (periods.data?.semesters ?? []).map(rangeOption)
+          : // Cả năm học: 1 lựa chọn duy nhất (year=1), có điểm khi đã có tuần bắt đầu
+            periods.data
+            ? [{ value: "1", label: `Năm học ${periods.data.schoolyear.name}`, started: startedWeeks.size > 0 }]
+            : []
 
   const value =
     chosen && chosen.yearId === picker.schoolyearid && chosen.type === type
       ? chosen.value
       : options.filter((o) => o.started).at(-1)?.value
-  const ranking = useRanking(picker.schoolyearid, value ? { type, value } : undefined, scope)
+  const period = value ? { type, value } : undefined
+  const ranking = useRanking(picker.schoolyearid, period, scope)
   const data = ranking.data
   // 409: khoảng chưa có tuần nào bắt đầu, không phải lỗi trang
   const notStarted = ranking.error instanceof ApiError && ranking.error.status === 409 ? ranking.error : undefined
   const error = picker.error ?? periods.error ?? (notStarted ? undefined : ranking.error)
+  const exportPath =
+    picker.schoolyearid && period ? `/scores/export?${rankingQuery(picker.schoolyearid, period, scope)}` : undefined
 
   return (
     <Card className="gap-0 py-0">
       <div className="flex flex-col gap-2 border-b border-border/70 p-3 sm:flex-row sm:flex-wrap sm:items-center">
         {tabs}
-        <Select
-          value={value ?? ""}
-          onValueChange={(v) => setChosen({ yearId: picker.schoolyearid, type, value: v })}
-          disabled={!options.length}
-        >
-          <SelectTrigger aria-label="Chọn khoảng xếp hạng" className="bg-white/70 sm:w-64">
-            <SelectValue placeholder={type === "week" ? "Chọn tuần" : type === "month" ? "Chọn tháng" : "Chọn học kỳ"} />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((o) => (
-              <SelectItem key={o.value} value={o.value} disabled={!o.started}>
-                {o.label}
-                {!o.started && " (chưa bắt đầu)"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {type !== "year" && (
+          <Select
+            value={value ?? ""}
+            onValueChange={(v) => setChosen({ yearId: picker.schoolyearid, type, value: v })}
+            disabled={!options.length}
+          >
+            <SelectTrigger aria-label="Chọn khoảng xếp hạng" className="bg-white/70 sm:w-64">
+              <SelectValue placeholder={type === "week" ? "Chọn tuần" : type === "month" ? "Chọn tháng" : "Chọn học kỳ"} />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((o) => (
+                <SelectItem key={o.value} value={o.value} disabled={!o.started}>
+                  {o.label}
+                  {!o.started && " (chưa bắt đầu)"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <ScopeFilter value={scope} onChange={onScopeChange} />
+        {/* Chỉ cho tải khi bảng đang có dữ liệu: khoảng chưa bắt đầu (409) hay lỗi thì BE cũng không tạo được file */}
+        <ExportButton path={exportPath} disabled={!data?.scores.length || !!ranking.error} />
       </div>
 
       {data && !notStarted && (
@@ -316,7 +357,7 @@ export function SummaryView() {
     <>
       <PageHeader
         title="Xếp hạng thi đua"
-        description="Xếp hạng theo tổng điểm của tuần, tháng, học kỳ hoặc khoảng tuần tùy chọn. Chỉ tính các tuần đã bắt đầu."
+        description="Xếp hạng theo tổng điểm của tuần, tháng, học kỳ, cả năm hoặc khoảng tuần tùy chọn. Chỉ tính các tuần đã bắt đầu. Tải Excel theo đúng khoảng và bộ lọc đang xem."
         actions={<SchoolYearSelect picker={picker} />}
       />
 

@@ -38,6 +38,10 @@ export type ClassItem = {
   name: string
   // Sĩ số
   numstudents: number
+  // Lớp đã ra trường (lưu trữ khi lên lớp): năm học ra trường; null = đang học.
+  // Lớp lưu trữ chỉ để xem, BE trả 409 với mọi thao tác ghi
+  archivedyearid: number | null
+  archivedyearname: string | null
   created_at: string
   updated_at: string
 }
@@ -75,6 +79,18 @@ export type SchoolYear = {
   created_at: string
   updated_at: string
 }
+
+// Kết quả lên lớp khi tạo năm học mới (POST /school-years); tên lớp là tên lúc lên lớp
+export type Promotion = {
+  fromschoolyear: string
+  archived: { id: number; name: string }[]
+  promoted: number
+  created: { id: number; name: string }[]
+  deactivatedAccounts: number
+}
+
+// promotion null: năm học đầu tiên, hoặc năm cũ đã lên lớp rồi
+export type CreatedSchoolYear = SchoolYear & { promotion: Promotion | null }
 
 export type Week = {
   id: number
@@ -170,7 +186,8 @@ export type SummaryRow = {
 }
 
 // Xếp hạng theo tuần / tháng / học kỳ (GET /scores/periods, /scores/ranking)
-export type PeriodType = "week" | "month" | "semester"
+// year: cả năm học (gửi year=1)
+export type PeriodType = "week" | "month" | "semester" | "year"
 
 // Tuần thuộc tháng chứa thứ Năm của tuần; started = tuần đã bắt đầu
 export type PeriodWeek = {
@@ -214,7 +231,8 @@ export type Ranking = {
   schoolyear: SchoolYear
   period: {
     type: PeriodType
-    value: number | string
+    // null với cả năm học
+    value: number | string | null
     label: string
     fromweek: number
     toweek: number
@@ -222,6 +240,8 @@ export type Ranking = {
     enddate: string
     numweeks: number
     countedweeks: number
+    // id các tuần thuộc khoảng (kể cả tuần chưa bắt đầu)
+    weekids: number[]
   }
   scores: RankingRow[]
 }

@@ -201,10 +201,11 @@ export function ConfirmDelete({
 }
 
 // Chạy thao tác ghi: toast kết quả, tải lại dữ liệu; trả về true nếu thành công
-export async function runMutation(action: () => Promise<unknown>, successMessage: string) {
+// successMessage là hàm khi thông báo phụ thuộc kết quả BE trả về
+export async function runMutation<T>(action: () => Promise<T>, successMessage: string | ((result: T) => string)) {
   try {
-    await action()
-    toast.success(successMessage)
+    const result = await action()
+    toast.success(typeof successMessage === "function" ? successMessage(result) : successMessage)
     refreshAll()
     return true
   } catch (err) {
