@@ -96,6 +96,11 @@ await snapshotAll([
   ...classes.map((c) => `/points?classid=${c.id}`),
   // Lịch sử lượt chấm của từng học sinh
   ...(allStudents ?? []).map((st) => `/points?studentid=${st.id}`),
+  // Trang công khai /LopHoc/<id> (mã QR) của lớp đang học và đã ra trường: năm mặc định + từng năm học
+  ...[...classes, ...archivedClasses].flatMap((c) => [
+    `/public/classes/${c.id}`,
+    ...schoolYears.map((y) => `/public/classes/${c.id}?schoolyearid=${y.id}`),
+  ]),
 ])
 
 for (const year of schoolYears) {

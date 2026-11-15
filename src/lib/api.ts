@@ -150,6 +150,20 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const fetcher = <T>(path: string) => api<T>(path)
 
+// API công khai (/public/..., phụ huynh không đăng nhập): không gửi token và không chuyển về trang đăng nhập khi lỗi
+export async function publicApi<T>(path: string): Promise<T> {
+  if (DEMO_MODE) return demoApi<T>(path)
+
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}${path}`)
+  } catch {
+    throw new ApiError("Không kết nối được máy chủ", 0)
+  }
+  const body = await res.json().catch(() => null)
+  return unwrap<T>(res.ok, res.status, body)
+}
+
 export const apiPost = <T>(path: string, data: unknown) =>
   api<T>(path, { method: "POST", body: JSON.stringify(data) })
 

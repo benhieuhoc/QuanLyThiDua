@@ -1,8 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { QRCodeCanvas } from "qrcode.react"
+import { toast } from "sonner"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Award, ClipboardList, Minus, Plus, Trophy, TriangleAlert, X } from "lucide-react"
+import { Award, ClipboardList, Copy, Download, ExternalLink, Link2, Minus, Plus, QrCode, Trophy, TriangleAlert, X } from "lucide-react"
 import { formatDate, formatRange } from "@/lib/format"
 import type { ClassItem, ClassScore, PeriodType, Point, PointStudent, RankingRow, ScorePeriods, SummaryRow } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -18,6 +20,7 @@ import {
 import { useWeekPicker } from "@/hooks/use-week-picker"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -137,6 +140,142 @@ function PeriodSelect({ periods, value, onChange }: { periods: ScorePeriods; val
 }
 
 // Cột chênh lệch tổng điểm so với điểm gốc từng tuần: trên trục 0 là cộng ròng, dưới là trừ ròng.
+// Ảnh gửi phụ huynh: mã QR + tên lớp bên dưới (mã QR trần dễ nhầm lớp khi gửi nhiều nhóm)
+const QR_SIZE = 560
+const QR_PADDING = 40
+const QR_CAPTION = 120
+
+function qrImage(qr: HTMLCanvasElement, title: string, subtitle: string) {
+  const canvas = document.createElement("canvas")
+  canvas.width = QR_SIZE + QR_PADDING * 2
+  canvas.height = QR_SIZE + QR_PADDING * 2 + QR_CAPTION
+  const ctx = canvas.getContext("2d")
+  if (!ctx) throw new Error("canvas")
+  ctx.fillStyle = "#ffffff"
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(qr, QR_PADDING, QR_PADDING, QR_SIZE, QR_SIZE)
+  // Dùng font của trang (Be Vietnam Pro, tên family do next/font sinh) để chữ tiếng Việt hiển thị đúng
+  const font = getComputedStyle(document.body).fontFamily
+  ctx.fillStyle = "#111827"
+  ctx.textAlign = "center"
+  ctx.font = `600 40px ${font}`
+  ctx.fillText(title, canvas.width / 2, QR_SIZE + QR_PADDING * 2 + 30)
+  ctx.fillStyle = "#6b7280"
+  ctx.font = `400 26px ${font}`
+  ctx.fillText(subtitle, canvas.width / 2, QR_SIZE + QR_PADDING * 2 + 80)
+  return canvas
+}
+
+const toPngBlob = (canvas: HTMLCanvasElement) =>
+  new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("toBlob"))), "image/png")
+  )
+
+// Mã QR trang công khai của lớp (/LopHoc/<id>) cho phụ huynh; id lớp giữ nguyên khi lên lớp nên mã dùng được nhiều năm
+function ClassQrDialog({ cls }: { cls: ClassItem }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="bg-white/70">
+          <QrCode />
+          Mã QR
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <ClassQrContent cls={cls} />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Chỉ render khi dialog mở (trên trình duyệt) nên đọc được window.location
+function ClassQrContent({ cls }: { cls: ClassItem }) {
+  const qrRef = useRef<HTMLCanvasElement>(null)
+  const url = `${window.location.origin}${cls.BaseQRCode}`
+  const subtitle = `${cls.branchname} · Quét để xem kết quả thi đua`
+  const image = () => (qrRef.current ? qrImage(qrRef.current, `Lớp ${cls.name}`, subtitle) : null)
+
+  const copyQr = async () => {
+    const canvas = image()
+    if (!canvas) return
+    if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
+      toast.error("Trình duyệt không hỗ trợ sao chép ảnh", { description: "Dùng nút Tải ảnh rồi gửi file cho phụ huynh." })
+      return
+    }
+    try {
+      // Truyền Promise vào ClipboardItem (không await trước) để Safari vẫn coi là thao tác của người dùng
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": toPngBlob(canvas) })])
+      toast.success("Đã sao chép mã QR", { description: "Dán (Ctrl+V) vào Zalo / Messenger để gửi phụ huynh." })
+    } catch {
+      toast.error("Không sao chép được mã QR", { description: "Dùng nút Tải ảnh rồi gửi file cho phụ huynh." })
+    }
+  }
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success("Đã sao chép đường dẫn")
+    } catch {
+      toast.error("Không sao chép được đường dẫn", { description: "Chọn và sao chép đường dẫn bên dưới mã QR." })
+    }
+  }
+
+  const download = () => {
+    const canvas = image()
+    if (!canvas) return
+    const a = document.createElement("a")
+    a.href = canvas.toDataURL("image/png")
+    a.download = `ma-qr-lop-${cls.name}.png`
+    a.click()
+  }
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Mã QR lớp {cls.name}</DialogTitle>
+        <DialogDescription>
+          Phụ huynh quét mã để xem kết quả thi đua của lớp, không cần đăng nhập. Mã dùng được cả các năm sau khi lên lớp.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="flex flex-col items-center gap-3">
+        <div className="rounded-xl bg-white p-3 ring-1 ring-border">
+          <QRCodeCanvas
+            ref={qrRef}
+            value={url}
+            size={220}
+            level="M"
+            marginSize={2}
+            title={`Mã QR trang kết quả thi đua lớp ${cls.name}`}
+          />
+        </div>
+        <p className="w-full truncate text-center text-xs text-muted-foreground select-all" title={url}>
+          {url}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button asChild>
+          <a href={url} target="_blank" rel="noopener noreferrer">
+            <ExternalLink />
+            Mở trang
+          </a>
+        </Button>
+        <Button variant="outline" onClick={copyQr}>
+          <Copy />
+          Sao chép mã QR
+        </Button>
+        <Button variant="outline" onClick={copyLink}>
+          <Link2 />
+          Sao chép link
+        </Button>
+        <Button variant="outline" onClick={download}>
+          <Download />
+          Tải ảnh
+        </Button>
+      </div>
+    </>
+  )
+}
+
 // Tổng tuyệt đối gần như bằng nhau (quanh điểm gốc) nên vẽ phần chênh lệch mới thấy khác biệt
 function WeeklyDeltaChart({ weeks }: { weeks: ClassScore["weeks"] }) {
   const deltas = weeks.map((w) => w.total - w.conduct_base - w.study_base)
@@ -487,6 +626,7 @@ export function ClassDetailView() {
             <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row">
               <ClassSelect classes={classes.data ?? []} value={classid} onChange={selectClass} />
               <PeriodSelect periods={periods.data} value={key} onChange={selectPeriod} />
+              <ClassQrDialog cls={cls} />
             </div>
             {range && (
               <div className="flex w-full flex-wrap items-center gap-2 border-t border-border/70 pt-3 text-sm">

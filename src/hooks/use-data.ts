@@ -1,7 +1,7 @@
 "use client"
 
 import useSWR from "swr"
-import { ApiError, fetcher } from "@/lib/api"
+import { ApiError, fetcher, publicApi } from "@/lib/api"
 import type {
   Account,
   Branch,
@@ -10,6 +10,7 @@ import type {
   ClassScore,
   Grade,
   PeriodType,
+  PublicClassPage,
   Point,
   Ranking,
   SchoolYear,
@@ -97,6 +98,19 @@ export const useRanking = (schoolyearid?: number, period?: RankingPeriod, scope:
     schoolyearid && period ? `/scores/ranking?${rankingQuery(schoolyearid, period, scope)}` : null,
     fetcher,
     { shouldRetryOnError: (err) => !(err instanceof ApiError && err.status >= 400 && err.status < 500) }
+  )
+
+// Trang lớp công khai (không đăng nhập); không truyền schoolyearid thì BE lấy năm học đã bắt đầu gần nhất của lớp.
+// 400/404 (id sai, lớp không có ở năm học) là kết quả xác định, không thử lại
+export const usePublicClass = (classid?: number, schoolyearid?: number) =>
+  useSWR<PublicClassPage>(
+    classid ? `/public/classes/${classid}${schoolyearid ? `?schoolyearid=${schoolyearid}` : ""}` : null,
+    publicApi,
+    {
+      shouldRetryOnError: (err) => !(err instanceof ApiError && err.status >= 400 && err.status < 500),
+      // Giữ dữ liệu năm đang xem khi đổi năm học để ô chọn năm không biến mất lúc tải
+      keepPreviousData: true,
+    }
   )
 
 export const useClassScore = (classid?: number, schoolyearid?: number) =>
