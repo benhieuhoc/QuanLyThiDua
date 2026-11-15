@@ -4,7 +4,9 @@ import { useRef, useState } from "react"
 import { QRCodeCanvas } from "qrcode.react"
 import { toast } from "sonner"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Award, ClipboardList, Copy, Download, ExternalLink, Link2, Minus, Plus, QrCode, Trophy, TriangleAlert, X } from "lucide-react"
+import { Award, ClipboardList, Copy, Download, ExternalLink, Link2, Minus, Plus, QrCode, RefreshCw, Trophy, TriangleAlert, X } from "lucide-react"
+import { apiPut } from "@/lib/api"
+import { isAdmin } from "@/lib/auth"
 import { formatDate, formatRange } from "@/lib/format"
 import type { ClassItem, ClassScore, PeriodType, Point, PointStudent, RankingRow, ScorePeriods, SummaryRow } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -12,6 +14,7 @@ import {
   useClassPoints,
   useClassScore,
   useClasses,
+  useMe,
   useRanking,
   useScorePeriods,
   useSummaryScore,
@@ -25,7 +28,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { EmptyState, ErrorState, PageHeader, StatCard, TableSkeleton, TeacherName } from "@/components/common"
+import { EmptyState, ErrorState, PageHeader, StatCard, TableSkeleton, TeacherName, runMutation } from "@/components/common"
 import { ClassName, SchoolYearSelect, SignedValue } from "@/components/scores"
 
 // Khoảng xem: "year" (cả năm học, các tuần đã bắt đầu) hoặc "<type>:<value>" như "month:2026-10"
@@ -171,7 +174,7 @@ const toPngBlob = (canvas: HTMLCanvasElement) =>
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("toBlob"))), "image/png")
   )
 
-// Mã QR trang công khai của lớp (/LopHoc/<id>) cho phụ huynh; id lớp giữ nguyên khi lên lớp nên mã dùng được nhiều năm
+// Mã QR trang công khai của lớp (/LopHoc/<qrcode>) cho phụ huynh; mã giữ nguyên khi lên lớp nên dùng được nhiều năm
 function ClassQrDialog({ cls }: { cls: ClassItem }) {
   return (
     <Dialog>
@@ -191,6 +194,9 @@ function ClassQrDialog({ cls }: { cls: ClassItem }) {
 // Chỉ render khi dialog mở (trên trình duyệt) nên đọc được window.location
 function ClassQrContent({ cls }: { cls: ClassItem }) {
   const qrRef = useRef<HTMLCanvasElement>(null)
+  const { data: me } = useMe()
+  const [confirming, setConfirming] = useState(false)
+  const [pending, setPending] = useState(false)
   const url = `${window.location.origin}${cls.BaseQRCode}`
   const subtitle = `${cls.branchname} · Quét để xem kết quả thi đua`
   const image = () => (qrRef.current ? qrImage(qrRef.current, `Lớp ${cls.name}`, subtitle) : null)
@@ -227,6 +233,15 @@ function ClassQrContent({ cls }: { cls: ClassItem }) {
     a.href = canvas.toDataURL("image/png")
     a.download = `ma-qr-lop-${cls.name}.png`
     a.click()
+  }
+
+  // Đổi mã khi QR bị lộ: BE cấp qrcode mới, link / QR cũ trả 404. refreshAll() trong runMutation
+  // tải lại /classes nên cls (và mã QR đang hiện) cập nhật theo
+  const regenerate = async () => {
+    setPending(true)
+    const ok = await runMutation(() => apiPut<ClassItem>(`/classes/${cls.id}/qrcode`, {}), `Đã tạo mã QR mới cho lớp ${cls.name}`)
+    setPending(false)
+    if (ok) setConfirming(false)
   }
 
   return (
@@ -272,6 +287,30 @@ function ClassQrContent({ cls }: { cls: ClassItem }) {
           Tải ảnh
         </Button>
       </div>
+      {isAdmin(me) &&
+        (confirming ? (
+          <div className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+            <p className="flex gap-2 text-sm">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
+              <span>
+                Mã QR và đường dẫn hiện tại (kể cả bản đã in, đã gửi phụ huynh) sẽ không dùng được nữa. Chỉ làm khi mã bị lộ.
+              </span>
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" disabled={pending} onClick={() => setConfirming(false)}>
+                Hủy
+              </Button>
+              <Button variant="destructive" size="sm" disabled={pending} onClick={regenerate}>
+                {pending ? "Đang tạo..." : "Tạo mã mới"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button variant="ghost" size="sm" className="justify-self-center text-muted-foreground" onClick={() => setConfirming(true)}>
+            <RefreshCw />
+            Tạo mã QR mới
+          </Button>
+        ))}
     </>
   )
 }

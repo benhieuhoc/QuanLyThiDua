@@ -100,11 +100,13 @@ export const useRanking = (schoolyearid?: number, period?: RankingPeriod, scope:
     { shouldRetryOnError: (err) => !(err instanceof ApiError && err.status >= 400 && err.status < 500) }
   )
 
-// Trang lớp công khai (không đăng nhập); không truyền schoolyearid thì BE lấy năm học đã bắt đầu gần nhất của lớp.
-// 400/404 (id sai, lớp không có ở năm học) là kết quả xác định, không thử lại
-export const usePublicClass = (classid?: number, schoolyearid?: number) =>
+// Trang lớp công khai (không đăng nhập), theo mã QR của lớp; không truyền schoolyearid thì BE lấy năm học
+// đã bắt đầu gần nhất của lớp. 400/404 (năm học sai, mã sai / đã đổi) là kết quả xác định, không thử lại
+export const usePublicClass = (qrcode?: string, schoolyearid?: number) =>
   useSWR<PublicClassPage>(
-    classid ? `/public/classes/${classid}${schoolyearid ? `?schoolyearid=${schoolyearid}` : ""}` : null,
+    qrcode
+      ? `/public/classes/${encodeURIComponent(qrcode)}${schoolyearid ? `?schoolyearid=${schoolyearid}` : ""}`
+      : null,
     publicApi,
     {
       shouldRetryOnError: (err) => !(err instanceof ApiError && err.status >= 400 && err.status < 500),

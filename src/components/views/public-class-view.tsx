@@ -19,14 +19,13 @@ import { ClassName, SignedValue } from "@/components/scores"
 // Trang cho phụ huynh (không đăng nhập, chủ yếu mở trên điện thoại sau khi quét QR):
 // chỉ dùng GET /public/classes/:id, không gọi API cần token
 export function PublicClassView() {
-  const params = useParams<{ id: string }>()
-  const id = Number(params.id)
-  const validId = Number.isInteger(id) && id > 0
+  // Mã QR là chuỗi ngẫu nhiên do BE cấp, truyền nguyên vào API (BE kiểm tra định dạng)
+  const { qrcode } = useParams<{ qrcode: string }>()
   const [schoolyearid, setSchoolyearid] = useState<number>()
-  const page = usePublicClass(validId ? id : undefined, schoolyearid)
+  const page = usePublicClass(qrcode, schoolyearid)
 
-  // 400 (id / năm học sai) và 404 (không có lớp / lớp không có ở năm học) đều báo không tìm thấy
-  const notFound = !validId || (page.error instanceof ApiError && (page.error.status === 400 || page.error.status === 404))
+  // 404 (mã sai / đã đổi, lớp không có ở năm học) và 400 (năm học sai) đều báo không tìm thấy
+  const notFound = page.error instanceof ApiError && (page.error.status === 400 || page.error.status === 404)
   const data = page.data
   const [latest, ...earlier] = data?.weeks ?? []
 
@@ -48,8 +47,8 @@ export function PublicClassView() {
         <Card className="py-0">
           <Message
             icon={SearchX}
-            title={validId && page.error instanceof Error ? page.error.message : "Không tìm thấy lớp"}
-            description="Kiểm tra lại mã QR hoặc đường dẫn được nhà trường cung cấp."
+            title={page.error instanceof Error ? page.error.message : "Không tìm thấy lớp"}
+            description="Kiểm tra lại mã QR hoặc đường dẫn được nhà trường cung cấp. Mã QR cũ có thể đã được nhà trường thay mới."
             action={
               // Lỗi do năm học vừa chọn: cho quay lại năm mặc định thay vì kẹt ở trang lỗi
               schoolyearid !== undefined && (
@@ -207,6 +206,11 @@ function PointList({ points }: { points: PublicWeek["points"] }) {
         <li key={i} className="flex items-start justify-between gap-3 py-2 text-sm">
           <div className="min-w-0">
             <p className="break-words">{p.content}</p>
+            {p.students.length > 0 && (
+              <p className="break-words text-xs font-medium text-foreground/80">
+                {p.students.map((s) => s.name).join(", ")}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">{p.type}</p>
           </div>
           <SignedValue value={p.value} />

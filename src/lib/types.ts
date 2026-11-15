@@ -42,7 +42,10 @@ export type ClassItem = {
   // Lớp lưu trữ chỉ để xem, BE trả 409 với mọi thao tác ghi
   archivedyearid: number | null
   archivedyearname: string | null
-  // Đường dẫn trang công khai của lớp cho phụ huynh, dạng "/LopHoc/<id>"; id giữ nguyên khi lên lớp nên mã QR dùng được nhiều năm
+  // Mã ngẫu nhiên 16 ký tự hex của trang công khai (không dùng id để không dò được lớp khác);
+  // giữ nguyên khi lên lớp, chỉ đổi khi admin tạo mã mới (PUT /classes/:id/qrcode)
+  qrcode: string
+  // Đường dẫn trang công khai của lớp cho phụ huynh: "/LopHoc/<qrcode>"
   BaseQRCode: string
   created_at: string
   updated_at: string
@@ -288,7 +291,7 @@ export type Account = {
 
 export type LoginResult = { token: string; account: Account }
 
-// GET /public/classes/:id?schoolyearid= (không cần đăng nhập): trang lớp cho phụ huynh quét mã QR.
+// GET /public/classes/:qrcode?schoolyearid= (không cần đăng nhập): trang lớp cho phụ huynh quét mã QR.
 // Chỉ có thông tin lớp và kết quả thi đua, không có học sinh hay người chấm
 export type PublicSchoolYear = {
   id: number
@@ -321,7 +324,8 @@ export type PublicWeek = {
   // Hạng toàn trường: rank / numclasses
   rank: number
   numclasses: number
-  points: { type: PointType; content: string; value: number }[]
+  // students: tên học sinh được gắn vào lượt chấm (chỉ có tên), [] nếu không gắn ai
+  points: { type: PointType; content: string; value: number; students: { name: string }[] }[]
 }
 
 export type PublicClassPage = {

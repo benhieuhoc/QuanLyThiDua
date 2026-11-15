@@ -5,9 +5,9 @@ import { PublicClassView } from "@/components/views/public-class-view"
 
 export const metadata: Metadata = { title: "Kết quả thi đua của lớp" }
 
-// Trang công khai cho phụ huynh quét mã QR (đường dẫn "/LopHoc/<id>" do BE quy định trong BaseQRCode).
+// Trang công khai cho phụ huynh quét mã QR (đường dẫn "/LopHoc/<qrcode>" do BE quy định trong BaseQRCode).
 // Nằm ngoài route group (dashboard): không có sidebar, header, AuthGuard.
-// View đọc [id] bằng useParams: với cacheComponents và không có generateStaticParams phải nằm trong Suspense
+// View đọc [qrcode] bằng useParams: với cacheComponents và không có generateStaticParams phải nằm trong Suspense
 export default function PublicClassPage() {
   return (
     <Suspense fallback={<TableSkeleton rows={6} />}>
