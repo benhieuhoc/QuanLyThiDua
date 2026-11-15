@@ -37,16 +37,16 @@ export function OverviewView() {
 
   return (
     <>
-      {/* Banner trường: mobile cắt theo tỉ lệ 4:1 giữ phần logo + tiêu đề bên trái, từ md hiện đủ ảnh */}
-      <div className="mb-6 overflow-hidden rounded-2xl shadow-sm ring-1 ring-black/5">
+      {/* Banner trường: hiện đủ ảnh, giới hạn chiều rộng để không chiếm quá nhiều chiều cao */}
+      <div className="mx-auto mb-6 max-w-3xl overflow-hidden rounded-2xl shadow-sm ring-1 ring-black/5">
         <Image
           src="/banner.jpg"
           alt="Trường THCS Phan Đình Phùng – Trang web quản lý thi đua lớp học"
-          width={2172}
-          height={386}
-          sizes="(min-width: 1280px) 1232px, (min-width: 768px) calc(100vw - 304px), calc(100vw - 32px)"
+          width={1024}
+          height={434}
+          sizes="(min-width: 800px) 768px, calc(100vw - 32px)"
           preload
-          className="aspect-[4/1] h-auto w-full object-cover object-left md:aspect-auto"
+          className="h-auto w-full"
         />
       </div>
 

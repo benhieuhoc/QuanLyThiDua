@@ -53,11 +53,11 @@ export function LoginView() {
           <Image
             src="/banner.jpg"
             alt="Trường THCS Phan Đình Phùng – Trang web quản lý thi đua lớp học"
-            width={2172}
-            height={386}
+            width={1024}
+            height={434}
             sizes="(min-width: 480px) 448px, calc(100vw - 32px)"
             preload
-            className="aspect-[3/1] h-auto w-full object-cover object-left"
+            className="h-auto w-full"
           />
         </div>
 

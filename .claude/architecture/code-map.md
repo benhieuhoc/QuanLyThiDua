@@ -62,7 +62,7 @@ src/
     └── utils.ts                   # cn()
 ```
 
-`public/` chứa SVG mặc định, `banner.jpg` (banner trường 2172×386, dùng ở `overview-view.tsx` và `login-view.tsx` qua `next/image`) và `demo-data/` (snapshot response BE cho bản demo, sinh bằng `scripts/snapshot-demo.mjs`, không sửa tay).
+`public/` chứa SVG mặc định, `banner.jpg` (banner trường 1024×434, thực chất là WebP dù đuôi .jpg; dùng ở `overview-view.tsx` và `login-view.tsx` qua `next/image`) và `demo-data/` (snapshot response BE cho bản demo, sinh bằng `scripts/snapshot-demo.mjs`, không sửa tay).
 
 ## Sitemap route
 
