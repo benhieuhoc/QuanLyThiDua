@@ -1,1 +1,1 @@
-{"status":200,"body":{"success":true,"data":[],"message":"Thành công"}}
+{"status":200,"body":{"success":true,"data":[{"id":705,"weekid":4,"classid":13,"type":"Nề nếp","content":"Không đeo khăn quàng đỏ (2 bạn)","value":-2,"accountid":null,"created_at":"2026-09-27","updated_at":"2026-09-27","classname":"6B5","classteacherid":13,"numweek":4,"schoolyearid":1,"locked":true,"accountusername":null,"students":[{"id":563,"code":"2609168407","name":"Lê Văn Định"},{"id":567,"code":"2609168707","name":"Hồ Lê Bảo Hân"}]}],"message":"Thành công"}}
