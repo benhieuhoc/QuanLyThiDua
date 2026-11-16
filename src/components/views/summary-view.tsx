@@ -75,8 +75,19 @@ function ModeTabs({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void 
 }
 
 // Dòng xếp hạng của /scores/ranking có thêm cộng/trừ từng phần và số lượt chấm; /scores/summary chỉ có điểm
-function RankTable({ rows, onSelect }: { rows: (SummaryRow | RankingRow)[]; onSelect: (classid: number) => void }) {
+// Nhiều tuần: BE xếp hạng theo avg_total (TB/tuần, từ 2026-11-16) nên cột TB/tuần là cột chính, Tổng chỉ để tham khảo.
+// Một tuần (byAvg = false): TB = tổng, giữ cột Tổng là cột chính như trước.
+function RankTable({
+  rows,
+  onSelect,
+  byAvg = true,
+}: {
+  rows: (SummaryRow | RankingRow)[]
+  onSelect: (classid: number) => void
+  byAvg?: boolean
+}) {
   const showEntries = rows.some((s) => "entries" in s)
+  const main = "text-base font-semibold"
   return (
     <Table>
       <TableHeader>
@@ -87,7 +98,12 @@ function RankTable({ rows, onSelect }: { rows: (SummaryRow | RankingRow)[]; onSe
           <TableHead className="text-right">Nề nếp</TableHead>
           <TableHead className="text-right">Học tập</TableHead>
           <TableHead className="text-right">Tổng</TableHead>
-          <TableHead className={cn("text-right", !showEntries && "pr-4")}>TB/tuần</TableHead>
+          <TableHead
+            className={cn("text-right", byAvg && "text-primary", !showEntries && "pr-4")}
+            title={byAvg ? "Hạng xếp theo điểm trung bình mỗi tuần" : undefined}
+          >
+            TB/tuần
+          </TableHead>
           {showEntries && <TableHead className="hidden pr-4 text-right sm:table-cell">Lượt chấm</TableHead>}
         </TableRow>
       </TableHeader>
@@ -117,9 +133,12 @@ function RankTable({ rows, onSelect }: { rows: (SummaryRow | RankingRow)[]; onSe
                 s.study_score
               )}
             </TableCell>
-            <TableCell className="text-right text-base font-semibold tabular-nums">{s.total}</TableCell>
-            <TableCell className={cn("text-right tabular-nums text-muted-foreground", !showEntries && "pr-4")}>
-              {s.avg_total.toLocaleString("vi-VN", { maximumFractionDigits: 2 })}
+            <TableCell className={cn("text-right tabular-nums", byAvg ? "text-muted-foreground" : main)}>{s.total}</TableCell>
+            <TableCell
+              className={cn("text-right tabular-nums", byAvg ? cn(main, "text-primary") : "text-muted-foreground", !showEntries && "pr-4")}
+            >
+              {/* Luôn 2 chữ số thập phân để thấy rõ chênh lệch giữa các hạng */}
+              {s.avg_total.toLocaleString("vi-VN", byAvg ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : { maximumFractionDigits: 2 })}
             </TableCell>
             {"entries" in s && (
               <TableCell className="hidden pr-4 text-right tabular-nums sm:table-cell">
@@ -222,6 +241,7 @@ function PeriodRanking({ type, picker, tabs, scope, onScopeChange, onSelect }: P
               Đã tính {data.period.countedweeks}/{data.period.numweeks} tuần
             </Badge>
           )}
+          {type !== "week" && <Badge variant="secondary">Xếp hạng theo điểm trung bình mỗi tuần</Badge>}
           <span className="text-xs text-muted-foreground sm:ml-auto">{data.scores.length} lớp</span>
         </div>
       )}
@@ -242,7 +262,7 @@ function PeriodRanking({ type, picker, tabs, scope, onScopeChange, onSelect }: P
       ) : !data?.scores.length ? (
         <EmptyState title="Không có lớp phù hợp" description="Thử đổi bộ lọc." />
       ) : (
-        <RankTable rows={data.scores} onSelect={onSelect} />
+        <RankTable rows={data.scores} onSelect={onSelect} byAvg={type !== "week"} />
       )}
     </Card>
   )
@@ -320,6 +340,7 @@ function RangeSummary({ picker, tabs, scope, onScopeChange, onSelect }: PanelPro
               {formatDate(fromWeek.startdate)} – {formatDate(toWeek.enddate)}
             </span>
           )}
+          {data.toweek > data.fromweek && <Badge variant="secondary">Xếp hạng theo điểm trung bình mỗi tuần</Badge>}
           <span className="text-xs text-muted-foreground sm:ml-auto">{data.scores.length} lớp</span>
         </div>
       )}
@@ -333,7 +354,7 @@ function RangeSummary({ picker, tabs, scope, onScopeChange, onSelect }: PanelPro
       ) : !data?.scores.length ? (
         <EmptyState title="Không có lớp phù hợp" description="Thử đổi bộ lọc." />
       ) : (
-        <RankTable rows={data.scores} onSelect={onSelect} />
+        <RankTable rows={data.scores} onSelect={onSelect} byAvg={data.toweek > data.fromweek} />
       )}
     </Card>
   )
@@ -357,7 +378,7 @@ export function SummaryView() {
     <>
       <PageHeader
         title="Xếp hạng thi đua"
-        description="Xếp hạng theo tổng điểm của tuần, tháng, học kỳ, cả năm hoặc khoảng tuần tùy chọn. Chỉ tính các tuần đã bắt đầu. Tải Excel theo đúng khoảng và bộ lọc đang xem."
+        description="Xếp hạng theo điểm trung bình mỗi tuần (TB/tuần) của tuần, tháng, học kỳ, cả năm hoặc khoảng tuần tùy chọn, để lớp có ít tuần được tính không bị thiệt. Chỉ tính các tuần đã bắt đầu. Tải Excel theo đúng khoảng và bộ lọc đang xem."
         actions={<SchoolYearSelect picker={picker} />}
       />
 

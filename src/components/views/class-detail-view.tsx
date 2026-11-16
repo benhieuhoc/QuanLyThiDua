@@ -590,7 +590,7 @@ export function ClassDetailView() {
   const range = periods.data ? rangeOf(key, periods.data) : undefined
   const period = parsePeriod(key)
 
-  // Hạng và tổng điểm của khoảng: cả năm dùng /scores/summary, còn lại /scores/ranking (hạng toàn trường)
+  // Hạng (theo TB/tuần) và điểm của khoảng: cả năm dùng /scores/summary, còn lại /scores/ranking (hạng toàn trường)
   const summary = useSummaryScore(!period ? schoolyearid : undefined)
   const ranking = useRanking(schoolyearid, period)
   const board: (SummaryRow | RankingRow)[] | undefined = period ? ranking.data?.scores : summary.data?.scores
@@ -711,9 +711,9 @@ export function ClassDetailView() {
                   loading={loadingData}
                 />
                 <StatCard
-                  label="Tổng điểm"
-                  value={row?.total ?? "—"}
-                  hint={row ? `TB ${row.avg_total.toLocaleString("vi-VN", { maximumFractionDigits: 2 })}/tuần · ${row.weeks} tuần` : undefined}
+                  label="Điểm TB/tuần"
+                  value={row ? row.avg_total.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                  hint={row ? `Tổng ${row.total} · ${row.weeks} tuần` : undefined}
                   icon={ClipboardList}
                   tone="indigo"
                   loading={loadingData}
