@@ -1,1 +1,1 @@
-{"status":200,"body":{"success":true,"data":[],"message":"Thành công"}}
+{"status":200,"body":{"success":true,"data":[{"id":2084,"weekid":10,"classid":18,"type":"Nề nếp","content":"Không mặc đồng phục","value":-1,"created_at":"2026-11-10","updated_at":"2026-11-10","accountid":1,"classname":"7A5","classteacherid":24,"numweek":10,"schoolyearid":1,"locked":true,"accountusername":"admin","students":[{"id":825,"code":"2506155707","name":"Ngô Mậu Quốc Vinh"}]}],"message":"Thành công"}}
