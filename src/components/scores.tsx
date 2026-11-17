@@ -6,7 +6,7 @@ import { ArrowRight, Lock, LockOpen } from "lucide-react"
 import { apiPut } from "@/lib/api"
 import { isAdmin } from "@/lib/auth"
 import { formatDate, formatRange, formatSigned, todayISO } from "@/lib/format"
-import type { Week } from "@/lib/types"
+import { POINT_TYPES, type PointType, type Week } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useBranches, useClassScore, useGrades, useMe, type ScoreScope } from "@/hooks/use-data"
 import type { WeekPicker } from "@/hooks/use-week-picker"
@@ -143,6 +143,32 @@ export function ScopeFilter({ value, onChange }: { value: ScoreScope; onChange: 
         </SelectContent>
       </Select>
     </>
+  )
+}
+
+// Chọn phần Nề nếp / Học tập (trang chấm điểm, trang quy chế)
+export function PointTypeSelect({
+  value,
+  onChange,
+  id,
+  disabled,
+}: {
+  value: PointType
+  onChange: (v: PointType) => void
+  id?: string
+  disabled?: boolean
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as PointType)} disabled={disabled}>
+      <SelectTrigger id={id} className="w-full bg-white/70">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {POINT_TYPES.map((t) => (
+          <SelectItem key={t} value={t}>{t}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 

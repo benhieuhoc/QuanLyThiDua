@@ -5,7 +5,7 @@ import Image from "next/image"
 import { useParams } from "next/navigation"
 import { ChevronDown, GraduationCap, SearchX, Trophy, WifiOff } from "lucide-react"
 import { ApiError } from "@/lib/api"
-import { formatRange } from "@/lib/format"
+import { formatDayLabel, formatRange } from "@/lib/format"
 import type { PublicWeek } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { usePublicClass } from "@/hooks/use-data"
@@ -211,7 +211,9 @@ function PointList({ points }: { points: PublicWeek["points"] }) {
                 {p.students.map((s) => s.name).join(", ")}
               </p>
             )}
-            <p className="text-xs text-muted-foreground">{p.type}</p>
+            <p className="text-xs text-muted-foreground">
+              {p.type} · {formatDayLabel(p.pointdate)}
+            </p>
           </div>
           <SignedValue value={p.value} />
         </li>

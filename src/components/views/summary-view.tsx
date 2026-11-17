@@ -4,7 +4,7 @@ import { useState } from "react"
 import { CalendarClock, FileDown } from "lucide-react"
 import { toast } from "sonner"
 import { ApiError, DEMO_MODE, apiDownload, errorMessage } from "@/lib/api"
-import { formatDate, formatRange } from "@/lib/format"
+import { formatDate, formatRange, todayISO } from "@/lib/format"
 import type { PeriodRange, PeriodType, RankingRow, SummaryRow } from "@/lib/types"
 import { rankingQuery, useRanking, useScorePeriods, useSummaryScore, type ScoreScope } from "@/hooks/use-data"
 import { useWeekPicker, type WeekPicker } from "@/hooks/use-week-picker"
@@ -289,13 +289,20 @@ function RangeSummary({ picker, tabs, scope, onScopeChange, onSelect }: PanelPro
   const setBound = (key: "from" | "to", value: number) =>
     setRange({ yearId: picker.schoolyearid, from: shownFrom, to: shownTo, [key]: value })
 
+  // Không chọn tuần chưa bắt đầu (tuần kết thúc không vượt tuần hiện tại; năm học đã qua không bị giới hạn).
+  // Chỉ gọi todayISO khi đã có dữ liệu: gọi new Date() lúc prerender sẽ lỗi build với cacheComponents
+  const today = weeks.length ? todayISO() : ""
+
   const weekOptions = (bound: "from" | "to") =>
     weeks.map((w) => (
       <SelectItem
         key={w.id}
         value={String(w.numweek)}
         // Giữ from ≤ to để BE không trả 400
-        disabled={bound === "from" ? shownTo !== undefined && w.numweek > shownTo : shownFrom !== undefined && w.numweek < shownFrom}
+        disabled={
+          w.startdate > today ||
+          (bound === "from" ? shownTo !== undefined && w.numweek > shownTo : shownFrom !== undefined && w.numweek < shownFrom)
+        }
       >
         Tuần {w.numweek} · {formatDate(bound === "from" ? w.startdate : w.enddate, false)}
       </SelectItem>

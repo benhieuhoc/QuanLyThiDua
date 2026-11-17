@@ -1,21 +1,29 @@
 "use client"
 
-import { useId, useRef, useState } from "react"
+import { useId, useState } from "react"
 import Link from "next/link"
-import { ChartColumn, Eye, Info, Lock, Minus, Pencil, Plus, Search, X } from "lucide-react"
+import { ChartColumn, Eye, Info, Lock, Pencil, Search, X } from "lucide-react"
 import { apiDelete, apiPost, apiPut } from "@/lib/api"
-import { canManagePoint, canScoreClass } from "@/lib/auth"
-import { formatRange } from "@/lib/format"
-import { POINT_TYPES, type Account, type Point, type PointStudent, type PointType, type Score, type Week } from "@/lib/types"
+import { canManagePoint, canScoreClass, isAdmin } from "@/lib/auth"
+import { clampDate, formatDate, formatRange, formatSigned, todayISO } from "@/lib/format"
+import {
+  POINT_TYPES,
+  type Account,
+  type Point,
+  type PointStudent,
+  type PointType,
+  type Rule,
+  type Score,
+  type Week,
+} from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { useMe, usePoints, useStudents, useWeeklyScore, type ScoreScope } from "@/hooks/use-data"
+import { useMe, usePoints, useRules, useStudents, useWeeklyScore, type ScoreScope } from "@/hooks/use-data"
 import { useWeekPicker } from "@/hooks/use-week-picker"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogClose,
@@ -31,6 +39,7 @@ import { canAccessPath } from "@/components/layout/nav"
 import {
   ClassName,
   LockWeekButton,
+  PointTypeSelect,
   RankBadge,
   ScopeFilter,
   SignedValue,
@@ -38,71 +47,237 @@ import {
   WeekStatus,
 } from "@/components/scores"
 
-// Giới hạn theo BE: content ≤ 255, value là số nguyên khác 0 trong -1000..1000
-const MAX_CONTENT = 255
-const MAX_VALUE = 1000
+// Điểm của lượt chấm: điểm 1 lần của mục × số học sinh được gắn (ít nhất 1). BE không tự nhân
+const pointValue = (rule: Rule, n: number) => rule.value * Math.max(1, n)
 
-type Sign = 1 | -1
+// Ngày mặc định: hôm nay kẹp vào tuần (tuần đã qua → ngày cuối, tuần chưa tới → ngày đầu)
+const defaultPointDate = (week: Week) => clampDate(todayISO(), week.startdate, week.enddate)
 
-// Nhập điểm bằng dấu (cộng/trừ) + độ lớn để không phải gõ dấu âm
-function usePointInput(initial?: Point) {
-  const [type, setType] = useState<PointType>(initial?.type ?? "Nề nếp")
-  const [content, setContent] = useState(initial?.content ?? "")
-  const [sign, setSign] = useState<Sign>(initial && initial.value > 0 ? 1 : -1)
-  const [amount, setAmount] = useState(initial ? String(Math.abs(initial.value)) : "1")
-  const [students, setStudents] = useState<PointStudent[]>(initial?.students ?? [])
+const inWeek = (date: string, week: Week) => Boolean(date) && date >= week.startdate && date <= week.enddate
 
-  const magnitude = Number(amount)
-  const valid =
-    content.trim().length > 0 && Number.isInteger(magnitude) && magnitude >= 1 && magnitude <= MAX_VALUE
+// Thời điểm nhập "HH:mm DD/MM/YYYY"; lượt nhập trước khi có giờ nhập (enteredtime "00:00") chỉ hiện ngày
+const formatEntered = (p: Point) =>
+  p.enteredtime === "00:00" ? formatDate(p.entereddate) : `${p.enteredtime} ${formatDate(p.entereddate)}`
 
-  return {
-    type, setType, content, setContent, sign, setSign, amount, setAmount, students, setStudents, valid,
-    body: { type, content: content.trim(), value: sign * magnitude },
-    studentIds: students.map((st) => st.id),
-  }
+// Bỏ dấu tiếng Việt + chữ thường theo từng ký tự để giữ nguyên độ dài chuỗi (vị trí tô đậm khớp với chuỗi gốc)
+function foldVietnamese(text: string) {
+  return Array.from(text)
+    .map((ch) => {
+      const folded = ch === "đ" || ch === "Đ" ? "d" : ch.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase()
+      return folded.length === ch.length ? folded : ch
+    })
+    .join("")
 }
 
-function SignToggle({ sign, onChange, disabled }: { sign: Sign; onChange: (s: Sign) => void; disabled?: boolean }) {
+function ValuePreview({ rule, count }: { rule?: Rule; count: number }) {
+  if (!rule) return null
   return (
-    <div className="flex rounded-lg border border-border bg-white/70 p-0.5" role="group" aria-label="Cộng hoặc trừ">
-      <Button
-        type="button"
-        size="sm"
-        variant={sign === -1 ? "destructive" : "ghost"}
-        aria-pressed={sign === -1}
-        onClick={() => onChange(-1)}
-        disabled={disabled}
-      >
-        <Minus /> Trừ
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        className={cn(sign === 1 && "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15")}
-        aria-pressed={sign === 1}
-        onClick={() => onChange(1)}
-        disabled={disabled}
-      >
-        <Plus /> Cộng
-      </Button>
+    <p className="text-sm text-muted-foreground">
+      Điểm: <SignedValue value={pointValue(rule, count)} />
+      {count > 1 && (
+        <span className="tabular-nums">
+          {" "}({formatSigned(rule.value)} × {count} học sinh)
+        </span>
+      )}
+    </p>
+  )
+}
+
+// Ô chọn mục quy chế có lọc theo nội dung (không phân biệt hoa thường, không phân biệt dấu)
+function RuleCombobox({
+  id,
+  rules,
+  value,
+  onChange,
+  placeholder = "Gõ để tìm mục quy chế",
+}: {
+  id?: string
+  rules: Rule[]
+  value?: Rule
+  onChange: (id: number) => void
+  placeholder?: string
+}) {
+  const [query, setQuery] = useState("")
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const listId = useId()
+
+  const keyword = foldVietnamese(query.trim())
+  const matches = rules.filter((r) => !keyword || foldVietnamese(r.content).includes(keyword))
+  const highlighted = Math.min(active, matches.length - 1)
+
+  const choose = (rule: Rule) => {
+    onChange(rule.id)
+    setQuery("")
+    setActive(0)
+    setOpen(false)
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault()
+      setOpen(true)
+      const step = e.key === "ArrowDown" ? 1 : -1
+      setActive((highlighted + step + matches.length) % Math.max(matches.length, 1))
+    } else if (e.key === "Enter" && open) {
+      // Chọn mục đang tô sáng thay vì gửi form
+      e.preventDefault()
+      if (matches[highlighted]) choose(matches[highlighted])
+    } else if (e.key === "Escape" && open) {
+      e.preventDefault()
+      setOpen(false)
+    }
+  }
+
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        id={id}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={open && matches[highlighted] ? `${listId}-${matches[highlighted].id}` : undefined}
+        // Đóng: hiện mục đã chọn; mở: hiện từ khóa đang gõ
+        value={open ? query : (value?.content ?? "")}
+        autoComplete="off"
+        placeholder={open && value ? value.content : placeholder}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setActive(0)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={onKeyDown}
+        className={cn("bg-white/70 pl-8", !open && value && "pr-12")}
+      />
+      {!open && value && (
+        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">
+          <SignedValue value={value.value} />
+        </span>
+      )}
+      {open && (
+        <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 animate-in fade-in-0 zoom-in-95 slide-in-from-top-2">
+          <p className="border-b border-border/70 px-3 py-1.5 text-xs text-muted-foreground">
+            {keyword ? `${matches.length} kết quả` : `${matches.length} mục`}
+          </p>
+          {matches.length === 0 ? (
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">Không có mục phù hợp</p>
+          ) : (
+            // Giữ focus ở ô tìm kiếm khi bấm chọn
+            <ul id={listId} role="listbox" aria-label="Mục quy chế" className="max-h-64 overflow-y-auto p-1" onMouseDown={(e) => e.preventDefault()}>
+              {matches.map((r, i) => (
+                <li
+                  key={r.id}
+                  id={`${listId}-${r.id}`}
+                  role="option"
+                  aria-selected={i === highlighted}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => choose(r)}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm",
+                    i === highlighted && "bg-accent text-accent-foreground",
+                    r.id === value?.id && "font-medium"
+                  )}
+                >
+                  <span className="min-w-0 flex-1 break-words">
+                    <Highlight text={r.content} keyword={keyword} fold={foldVietnamese} />
+                    {!r.active && <span className="text-xs text-muted-foreground"> (ngừng áp dụng)</span>}
+                  </span>
+                  <SignedValue value={r.value} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-function TypeSelect({ value, onChange, id, disabled }: { value: PointType; onChange: (v: PointType) => void; id?: string; disabled?: boolean }) {
+// Mục quy chế cùng phần, đang áp dụng; keepId: mục đang gắn sẵn trên lượt chấm (vẫn chọn được dù đã ngừng)
+function RuleSelect({
+  id,
+  type,
+  value,
+  onChange,
+  keepId,
+  placeholder,
+}: {
+  id?: string
+  type: PointType
+  value?: number
+  onChange: (id: number) => void
+  keepId?: number | null
+  placeholder?: string
+}) {
+  const rules = useRules()
+  const isAdminUser = isAdmin(useMe().data)
+
+  if (rules.error) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 px-3 py-2 text-sm text-destructive">
+        <span className="flex-1">Không tải được quy chế thi đua.</span>
+        <Button type="button" variant="outline" size="sm" onClick={() => rules.mutate()}>
+          Thử lại
+        </Button>
+      </div>
+    )
+  }
+  if (!rules.data) return <Input id={id} disabled placeholder="Đang tải quy chế..." className="bg-white/70" />
+
+  const options = rules.data.filter((r) => r.type === type && (r.active || r.id === keepId))
+  if (options.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+        Chưa có mục quy chế {type} nào đang áp dụng.{" "}
+        {isAdminUser ? (
+          <Link href="/quy-che" className="font-medium text-primary underline-offset-4 hover:underline">
+            Thêm mục quy chế
+          </Link>
+        ) : (
+          "Liên hệ giáo viên quản lý nề nếp."
+        )}
+      </p>
+    )
+  }
   return (
-    <Select value={value} onValueChange={(v) => onChange(v as PointType)} disabled={disabled}>
-      <SelectTrigger id={id} className="w-full bg-white/70">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {POINT_TYPES.map((t) => (
-          <SelectItem key={t} value={t}>{t}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <RuleCombobox
+      id={id}
+      rules={options}
+      value={options.find((r) => r.id === value)}
+      onChange={onChange}
+      placeholder={placeholder}
+    />
+  )
+}
+
+// Ngày diễn ra, giới hạn trong tuần (BE trả 400 khi ngoài tuần)
+function PointDateInput({ id, week, value, onChange }: { id: string; week: Week; value: string; onChange: (v: string) => void }) {
+  const invalid = !inWeek(value, week)
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>Ngày</Label>
+      <Input
+        id={id}
+        type="date"
+        min={week.startdate}
+        max={week.enddate}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={invalid}
+        aria-describedby={invalid ? `${id}-error` : undefined}
+        className="w-40 bg-white/70"
+      />
+      {invalid && (
+        <p id={`${id}-error`} className="text-xs text-destructive">
+          Chọn ngày trong tuần {week.numweek} ({formatRange(week.startdate, week.enddate)})
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -253,9 +428,18 @@ function StudentPicker({
   )
 }
 
-// Tô đậm phần khớp từ khóa (không phân biệt hoa thường)
-function Highlight({ text, keyword }: { text: string; keyword: string }) {
-  const index = keyword ? text.toLowerCase().indexOf(keyword) : -1
+// Tô đậm phần khớp từ khóa; fold chuẩn hóa chuỗi trước khi so (mặc định: không phân biệt hoa thường),
+// phải giữ nguyên độ dài chuỗi để vị trí khớp đúng với chuỗi gốc
+function Highlight({
+  text,
+  keyword,
+  fold = (s) => s.toLowerCase(),
+}: {
+  text: string
+  keyword: string
+  fold?: (s: string) => string
+}) {
+  const index = keyword ? fold(text).indexOf(keyword) : -1
   if (index < 0) return <>{text}</>
   return (
     <>
@@ -266,34 +450,56 @@ function Highlight({ text, keyword }: { text: string; keyword: string }) {
   )
 }
 
-// Form thêm nhanh: giữ loại và dấu sau khi thêm để nhập liên tiếp
+// Form thêm nhanh: giữ phần, mục và ngày sau khi thêm để nhập liên tiếp
 function AddPointForm({ week, score }: { week: Week; score: Score }) {
-  const input = usePointInput()
+  const rules = useRules()
+  const [type, setType] = useState<PointType>("Nề nếp")
+  const [ruleid, setRuleid] = useState<number>()
+  const [students, setStudents] = useState<PointStudent[]>([])
+  const [pointdate, setPointdate] = useState(() => defaultPointDate(week))
   const [pending, setPending] = useState(false)
-  const contentRef = useRef<HTMLInputElement>(null)
 
-  // Đổi lớp thì bỏ học sinh đã chọn (BE chỉ cho gắn học sinh của lớp được chấm); loại và dấu vẫn giữ
+  // Đổi lớp thì bỏ học sinh đã chọn (BE chỉ cho gắn học sinh của lớp được chấm); phần, mục, ngày vẫn giữ
   const [classid, setClassid] = useState(score.classid)
   if (classid !== score.classid) {
     setClassid(score.classid)
-    input.setStudents([])
+    setStudents([])
+  }
+  // Đổi tuần thì đặt lại ngày mặc định của tuần mới
+  const [weekid, setWeekid] = useState(week.id)
+  if (weekid !== week.id) {
+    setWeekid(week.id)
+    setPointdate(defaultPointDate(week))
+  }
+
+  // Mục vừa bị ngừng áp dụng (sau khi tải lại) coi như chưa chọn
+  const rule = rules.data?.find((r) => r.id === ruleid && r.active && r.type === type)
+  const valid = Boolean(rule) && inWeek(pointdate, week)
+
+  const changeType = (next: PointType) => {
+    setType(next)
+    setRuleid(undefined)
   }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.valid) return
+    if (!rule || !valid) return
+    const value = pointValue(rule, students.length)
     setPending(true)
     const ok = await runMutation(
-      () => apiPost("/points", { weekid: week.id, classid: score.classid, ...input.body, studentIds: input.studentIds }),
-      `Đã chấm ${input.body.value > 0 ? "+" : ""}${input.body.value} ${input.type} cho lớp ${score.classname}`
+      () =>
+        apiPost("/points", {
+          weekid: week.id,
+          classid: score.classid,
+          ruleid: rule.id,
+          value,
+          pointdate,
+          studentIds: students.map((st) => st.id),
+        }),
+      `Đã chấm ${formatSigned(value)} ${type} cho lớp ${score.classname}`
     )
     setPending(false)
-    if (ok) {
-      input.setContent("")
-      input.setAmount("1")
-      input.setStudents([])
-      contentRef.current?.focus()
-    }
+    if (ok) setStudents([])
   }
 
   return (
@@ -302,43 +508,25 @@ function AddPointForm({ week, score }: { week: Week; score: Score }) {
       <div className="grid gap-3 sm:grid-cols-[150px_1fr]">
         <div className="grid gap-1.5">
           <Label htmlFor="point-type">Phần</Label>
-          <TypeSelect id="point-type" value={input.type} onChange={input.setType} />
+          <PointTypeSelect id="point-type" value={type} onChange={changeType} />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="point-content">Nội dung</Label>
-          <Input
-            id="point-content"
-            ref={contentRef}
-            value={input.content}
-            maxLength={MAX_CONTENT}
-            placeholder={input.sign < 0 ? "Đi trễ 2 bạn" : "Tiết học tốt"}
-            onChange={(e) => input.setContent(e.target.value)}
-            className="bg-white/70"
-          />
+          <Label htmlFor="point-rule">Mục quy chế</Label>
+          <RuleSelect id="point-rule" type={type} value={ruleid} onChange={setRuleid} />
         </div>
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="point-students">
           Học sinh <span className="font-normal text-muted-foreground">(không bắt buộc)</span>
         </Label>
-        <StudentPicker id="point-students" classid={score.classid} value={input.students} onChange={input.setStudents} />
+        <StudentPicker id="point-students" classid={score.classid} value={students} onChange={setStudents} />
       </div>
       <div className="flex flex-wrap items-end gap-3">
-        <SignToggle sign={input.sign} onChange={input.setSign} />
-        <div className="grid gap-1.5">
-          <Label htmlFor="point-amount">Điểm</Label>
-          <Input
-            id="point-amount"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={MAX_VALUE}
-            value={input.amount}
-            onChange={(e) => input.setAmount(e.target.value)}
-            className="w-24 bg-white/70"
-          />
+        <PointDateInput id="point-date" week={week} value={pointdate} onChange={setPointdate} />
+        <div className="pb-2">
+          <ValuePreview rule={rule} count={students.length} />
         </div>
-        <Button type="submit" className="ml-auto" disabled={!input.valid || pending}>
+        <Button type="submit" className="ml-auto" disabled={!valid || pending}>
           {pending ? "Đang lưu..." : "Thêm"}
         </Button>
       </div>
@@ -346,7 +534,7 @@ function AddPointForm({ week, score }: { week: Week; score: Score }) {
   )
 }
 
-function EditPointDialog({ point }: { point: Point }) {
+function EditPointDialog({ point, week }: { point: Point; week: Week }) {
   const [open, setOpen] = useState(false)
   // Khởi tạo lại form mỗi lần mở bằng key
   const [version, setVersion] = useState(0)
@@ -364,24 +552,56 @@ function EditPointDialog({ point }: { point: Point }) {
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <EditPointForm key={version} point={point} onDone={() => setOpen(false)} />
+        <EditPointForm key={version} point={point} week={week} onDone={() => setOpen(false)} />
       </DialogContent>
     </Dialog>
   )
 }
 
-function EditPointForm({ point, onDone }: { point: Point; onDone: () => void }) {
-  const input = usePointInput(point)
+const sortedIds = (list: { id: number }[]) => list.map((x) => x.id).sort((a, b) => a - b).join()
+
+// Chỉ gửi trường thay đổi: bỏ trường thì BE giữ nguyên
+function EditPointForm({ point, week, onDone }: { point: Point; week: Week; onDone: () => void }) {
+  const rules = useRules()
+  const original = point.ruleid ?? undefined
+  const [type, setType] = useState<PointType>(point.type)
+  const [ruleid, setRuleid] = useState<number | undefined>(original)
+  const [students, setStudents] = useState<PointStudent[]>(point.students)
+  const [pointdate, setPointdate] = useState(point.pointdate)
   const [pending, setPending] = useState(false)
+
+  const rule = rules.data?.find((r) => r.id === ruleid)
+  const ruleChanged = ruleid !== original
+  const countChanged = students.length !== point.students.length
+  const studentsChanged = sortedIds(students) !== sortedIds(point.students)
+  const dateChanged = pointdate !== point.pointdate
+  // Tính lại điểm khi đổi mục hoặc đổi số học sinh; lượt nhập tự do cũ (không có mục) giữ điểm cũ
+  const recompute = ruleChanged || (countChanged && ruleid !== undefined)
+
+  const body: Record<string, unknown> = {}
+  if (studentsChanged) body.studentIds = students.map((st) => st.id)
+  if (ruleChanged && rule) {
+    body.ruleid = rule.id
+    body.type = rule.type
+  }
+  if (recompute && rule) body.value = pointValue(rule, students.length)
+  if (dateChanged) body.pointdate = pointdate
+
+  // Đổi phần thì bắt buộc chọn mục của phần mới; cần mục đã tải để tính lại điểm
+  const valid =
+    inWeek(pointdate, week) && (type === point.type || ruleChanged) && (!recompute || (rule !== undefined && rule.type === type))
+  const dirty = Object.keys(body).length > 0
+
+  // Quay lại phần cũ thì khôi phục mục cũ
+  const changeType = (next: PointType) => {
+    setType(next)
+    setRuleid(next === point.type ? original : undefined)
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.valid) return
+    if (!valid || !dirty) return
     setPending(true)
-    // Chỉ gửi studentIds khi danh sách đổi: bỏ trường thì BE giữ nguyên
-    const before = point.students.map((st) => st.id).sort((a, b) => a - b).join()
-    const after = [...input.studentIds].sort((a, b) => a - b).join()
-    const body = before === after ? input.body : { ...input.body, studentIds: input.studentIds }
     const ok = await runMutation(() => apiPut(`/points/${point.id}`, body), "Đã cập nhật lượt chấm")
     setPending(false)
     if (ok) onDone()
@@ -393,44 +613,45 @@ function EditPointForm({ point, onDone }: { point: Point; onDone: () => void }) 
         <DialogTitle>Sửa lượt chấm</DialogTitle>
         <DialogDescription>Lớp {point.classname} · tuần {point.numweek}</DialogDescription>
       </DialogHeader>
-      <div className="grid gap-2">
-        <Label htmlFor="edit-point-type">Phần</Label>
-        <TypeSelect id="edit-point-type" value={input.type} onChange={input.setType} />
+      <div className="flex items-start gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm">
+        <span className="min-w-0 flex-1 break-words">
+          <span className="text-muted-foreground">{point.ruleid === null ? "Nhập tự do: " : "Hiện tại: "}</span>
+          {point.content}
+        </span>
+        <SignedValue value={point.value} />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="edit-point-content">Nội dung</Label>
-        <Input
-          id="edit-point-content"
-          value={input.content}
-          maxLength={MAX_CONTENT}
-          onChange={(e) => input.setContent(e.target.value)}
+        <Label htmlFor="edit-point-type">Phần</Label>
+        <PointTypeSelect id="edit-point-type" value={type} onChange={changeType} />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="edit-point-rule">Mục quy chế</Label>
+        <RuleSelect
+          id="edit-point-rule"
+          type={type}
+          value={ruleid}
+          onChange={setRuleid}
+          keepId={point.ruleid}
+          placeholder={point.ruleid === null && type === point.type ? "Giữ nội dung nhập tự do" : undefined}
         />
       </div>
       <div className="grid gap-2">
         <Label htmlFor="edit-point-students">Học sinh</Label>
-        <StudentPicker id="edit-point-students" classid={point.classid} value={input.students} onChange={input.setStudents} />
+        <StudentPicker id="edit-point-students" classid={point.classid} value={students} onChange={setStudents} />
       </div>
       <div className="flex flex-wrap items-end gap-3">
-        <SignToggle sign={input.sign} onChange={input.setSign} />
-        <div className="grid gap-1.5">
-          <Label htmlFor="edit-point-amount">Điểm</Label>
-          <Input
-            id="edit-point-amount"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={MAX_VALUE}
-            value={input.amount}
-            onChange={(e) => input.setAmount(e.target.value)}
-            className="w-24"
-          />
-        </div>
+        <PointDateInput id="edit-point-date" week={week} value={pointdate} onChange={setPointdate} />
+        {recompute && (
+          <div className="pb-2">
+            <ValuePreview rule={rule} count={students.length} />
+          </div>
+        )}
       </div>
       <DialogFooter>
         <DialogClose asChild>
           <Button type="button" variant="outline">Hủy</Button>
         </DialogClose>
-        <Button type="submit" disabled={!input.valid || pending}>
+        <Button type="submit" disabled={!valid || !dirty || pending}>
           {pending ? "Đang lưu..." : "Lưu"}
         </Button>
       </DialogFooter>
@@ -483,13 +704,13 @@ function PointList({ week, score }: { week: Week; score: Score }) {
                         </span>
                       )}
                       <span className="block text-xs text-muted-foreground/80">
-                        Người nhập: {p.accountusername ?? "Không rõ"}
+                        Người nhập: {p.accountusername ?? "Không rõ"} · {formatEntered(p)}
                       </span>
                     </span>
                     <SignedValue value={p.value} />
                     {!week.locked && canManagePoint(me, p) && (
                       <div className="flex">
-                        <EditPointDialog point={p} />
+                        <EditPointDialog point={p} week={week} />
                         <ConfirmDelete
                           title="Xóa lượt chấm?"
                           description={`${p.content} (${p.value > 0 ? "+" : ""}${p.value}) của lớp ${p.classname}.`}

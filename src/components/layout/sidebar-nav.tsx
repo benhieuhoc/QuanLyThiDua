@@ -27,7 +27,8 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const me = useMe().data
 
   return (
-    <nav className="flex flex-col gap-5">
+    // Cuộn riêng khi menu dài hơn chiều cao màn hình; -mx-1/px-1 để vòng focus không bị cắt
+    <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-1">
       {(me ? navSectionsFor(me.kind) : []).map((section) => (
         <div key={section.title} className="flex flex-col gap-1">
           <p className="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">

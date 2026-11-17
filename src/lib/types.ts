@@ -138,6 +138,28 @@ export type Point = {
   accountusername: string | null
   // GVCN của lớp
   classteacherid: number | null
+  // Mục quy chế đã chọn (rulecontent: nội dung hiện tại của mục); null = nhập tự do (dữ liệu cũ)
+  ruleid: number | null
+  rulecontent: string | null
+  // Ngày diễn ra "YYYY-MM-DD", luôn nằm trong tuần
+  pointdate: string
+  // Thời điểm nhập theo giờ Việt Nam ("YYYY-MM-DD", "HH:mm"); lượt nhập trước 2026-11-17 có enteredtime "00:00"
+  entereddate: string
+  enteredtime: string
+  // Riêng bảng point: chuỗi ISO UTC có giờ, không dùng để hiển thị (dùng entereddate/enteredtime)
+  created_at: string
+  updated_at: string
+}
+
+// Mục quy chế thi đua: value là điểm cho 1 lần (âm = trừ, dương = cộng), nguyên ≠ 0 trong -1000..1000.
+// active false = ngừng áp dụng; uses = số lượt chấm đang gắn mục (uses > 0 thì không xóa được)
+export type Rule = {
+  id: number
+  type: PointType
+  content: string
+  value: number
+  active: boolean
+  uses: number
   created_at: string
   updated_at: string
 }
@@ -325,7 +347,8 @@ export type PublicWeek = {
   rank: number
   numclasses: number
   // students: tên học sinh được gắn vào lượt chấm (chỉ có tên), [] nếu không gắn ai
-  points: { type: PointType; content: string; value: number; students: { name: string }[] }[]
+  // pointdate: ngày diễn ra "YYYY-MM-DD" (không có giờ nhập)
+  points: { type: PointType; content: string; value: number; pointdate: string; students: { name: string }[] }[]
 }
 
 export type PublicClassPage = {

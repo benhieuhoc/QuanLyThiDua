@@ -50,9 +50,10 @@
 
 :root {
   /* Light mode chủ đạo: nền xám lạnh rất nhạt, nhấn màu indigo, bề mặt kính mờ */
-  --background: oklch(0.985 0.003 264);
+  --background: oklch(1 0 0);
   --foreground: oklch(0.21 0.03 265);
-  --card: oklch(1 0 0 / 62%);
+  /* Nền khung ngả xanh tím nhạt để tách nội dung khỏi nền trắng */
+  --card: oklch(0.968 0.016 274 / 92%);
   --card-foreground: oklch(0.21 0.03 265);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.03 265);
@@ -140,5 +141,5 @@
   background-color: oklch(1 0 0 / 58%);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border-color: oklch(1 0 0 / 75%);
+  border-color: oklch(0.21 0.03 265 / 10%);
 }

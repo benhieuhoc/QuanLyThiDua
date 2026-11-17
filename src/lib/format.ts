@@ -14,4 +14,15 @@ export function todayISO() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
-export const formatSigned = (value: number) => (value > 0 ? `+${value}` : String(value))
+const WEEKDAYS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"]
+
+// "2026-11-17" → "T3 17/11"; tính thứ theo UTC để không lệch múi giờ
+export function formatDayLabel(value: string) {
+  const [y, m, d] = value.split("-").map(Number)
+  return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${formatDate(value, false)}`
+}
+
+// Kẹp ngày "YYYY-MM-DD" vào [min, max] bằng so sánh chuỗi
+export const clampDate = (value: string, min: string, max: string) => (value < min ? min : value > max ? max : value)
+
+export const formatSigned =(value: number) => (value > 0 ? `+${value}` : String(value))

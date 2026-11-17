@@ -13,6 +13,7 @@ import type {
   PublicClassPage,
   Point,
   Ranking,
+  Rule,
   SchoolYear,
   ScorePeriods,
   Student,
@@ -43,7 +44,10 @@ export const useArchivedClasses = (enabled = true) =>
 
 export const useClass = (id?: number) => useSWR<ClassDetail>(id ? `/classes/${id}` : null, fetcher)
 
-export const useSchoolYears = () => useSWR<SchoolYear[]>("/school-years", fetcher)
+// Quy chế thi đua: tải toàn bộ (cả mục ngừng áp dụng), lọc theo phần / active ở client
+export const useRules = () => useSWR<Rule[]>("/rules", fetcher)
+
+export const useSchoolYears =() => useSWR<SchoolYear[]>("/school-years", fetcher)
 
 // Key null khi chưa chọn đủ tham số: SWR không gọi API
 export const useWeeks = (schoolyearid?: number) =>

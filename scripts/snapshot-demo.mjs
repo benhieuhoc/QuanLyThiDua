@@ -75,7 +75,7 @@ const [branches, grades, classes, schoolYears] = await Promise.all(
 if (!branches || !grades || !classes || !schoolYears) {
   throw new Error(`Không đọc được dữ liệu từ ${API_URL}; kiểm tra BE đang chạy`)
 }
-await snapshotAll(["/teachers", "/weeks/current", "/accounts"])
+await snapshotAll(["/teachers", "/weeks/current", "/accounts", "/rules"])
 // Trang Lớp học, mục "Đã ra trường": danh sách + dialog học sinh của từng lớp lưu trữ
 const archivedClasses = (await snapshot("/classes?archived=true")) ?? []
 await snapshotAll(archivedClasses.map((c) => `/classes/${c.id}`))
