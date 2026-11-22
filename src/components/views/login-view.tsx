@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { LogIn } from "lucide-react"
-import { DEMO_MODE, errorMessage, getToken, login } from "@/lib/api"
+import { ArrowLeft, LogIn } from "lucide-react"
+import { DEMO_MODE, errorMessage, getToken, login, PARENT_LOGIN_PATH } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -32,7 +33,8 @@ export function LoginView() {
     setError(undefined)
     try {
       await login(username.trim(), password)
-      router.replace("/")
+      // Điều hướng cứng: cache SWR đang giữ trạng thái khách (/auth/me 401) từ trang Tổng quan
+      window.location.replace("/")
     } catch (err) {
       // Thông báo chung của BE ("Sai tài khoản hoặc mật khẩu", "Tài khoản đã bị khóa")
       setError(errorMessage(err).title)
@@ -62,7 +64,7 @@ export function LoginView() {
         </div>
 
         <Card className="gap-0 px-6 py-6">
-          <h1 className="text-xl font-semibold tracking-tight">Đăng nhập</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Giáo viên – Cờ đỏ đăng nhập</h1>
           <p className="mt-1 text-sm text-muted-foreground">Dùng tài khoản do giáo viên quản lý nề nếp cấp.</p>
 
           <form onSubmit={submit} className="mt-5 grid gap-4">
@@ -98,7 +100,20 @@ export function LoginView() {
               <LogIn /> {pending ? "Đang đăng nhập..." : "Đăng nhập"}
             </Button>
           </form>
+
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Bạn là phụ huynh?{" "}
+            <Link href={PARENT_LOGIN_PATH} className="font-medium text-primary hover:underline">
+              Đăng nhập phụ huynh
+            </Link>
+          </p>
         </Card>
+
+        <Button variant="ghost" size="sm" className="mt-3" asChild>
+          <Link href="/">
+            <ArrowLeft /> Về trang tổng quan
+          </Link>
+        </Button>
       </div>
     </div>
   )

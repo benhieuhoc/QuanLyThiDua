@@ -2,10 +2,10 @@
 
 import { useState } from "react"
 import { ClipboardList, Lock, LockOpen, Pencil, Plus, Search } from "lucide-react"
-import { apiDelete, apiPost, apiPut, errorMessage } from "@/lib/api"
+import { apiDelete, apiPost, apiPut } from "@/lib/api"
 import { KIND_LABELS } from "@/lib/auth"
 import type { Account, AccountKind, ClassItem, Teacher } from "@/lib/types"
-import { useAccounts, useClasses, useMe, useStudents, useTeachers } from "@/hooks/use-data"
+import { useAccounts, useClasses, useMe, useTeachers } from "@/hooks/use-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -24,14 +24,21 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { ConfirmDelete, EmptyState, ErrorState, PageHeader, TableSkeleton, runMutation } from "@/components/common"
+import {
+  ClassSelect,
+  ConfirmDelete,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  PasswordField,
+  StudentSelect,
+  TableSkeleton,
+  USERNAME_RE,
+  UsernameField,
+  runMutation,
+  validPassword,
+} from "@/components/common"
 
-// Giới hạn theo BE: username 3–50 ký tự chữ thường, số, . _ -; mật khẩu 6 ký tự – 72 byte
-const USERNAME_RE = /^[a-z0-9._-]{3,50}$/
-const MIN_PASSWORD = 6
-const MAX_PASSWORD_BYTES = 72
-const validPassword = (value: string) =>
-  value.length >= MIN_PASSWORD && new TextEncoder().encode(value).length <= MAX_PASSWORD_BYTES
 
 const KINDS: AccountKind[] = ["admin", "gvcn", "codo"]
 const NONE = "none"
@@ -42,122 +49,6 @@ const kindTone: Record<AccountKind, string> = {
   codo: "border-rose-500/30 bg-rose-500/10 text-rose-700",
 }
 
-function UsernameField({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
-  const invalid = value.length > 0 && !USERNAME_RE.test(value)
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor={id}>Tên đăng nhập</Label>
-      <Input
-        id={id}
-        value={value}
-        maxLength={50}
-        autoComplete="off"
-        autoCapitalize="none"
-        spellCheck={false}
-        placeholder="gvcn.6a1"
-        aria-invalid={invalid ? true : undefined}
-        // BE tự chuyển về chữ thường; chuyển sẵn để kiểm tra hợp lệ
-        onChange={(e) => onChange(e.target.value.toLowerCase())}
-      />
-      <p className={invalid ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
-        3–50 ký tự: chữ thường không dấu, số, dấu chấm, gạch dưới, gạch ngang.
-      </p>
-    </div>
-  )
-}
-
-function PasswordField({
-  id,
-  label,
-  value,
-  onChange,
-  optional,
-}: {
-  id: string
-  label: string
-  value: string
-  onChange: (v: string) => void
-  optional?: boolean
-}) {
-  const invalid = value.length > 0 && !validPassword(value)
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor={id}>
-        {label} {optional && <span className="font-normal text-muted-foreground">(bỏ trống nếu không đổi)</span>}
-      </Label>
-      <Input
-        id={id}
-        type="password"
-        value={value}
-        autoComplete="new-password"
-        aria-invalid={invalid ? true : undefined}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {invalid && <p className="text-xs text-destructive">Tối thiểu {MIN_PASSWORD} ký tự, tối đa {MAX_PASSWORD_BYTES} byte.</p>}
-    </div>
-  )
-}
-
-function ClassSelect({
-  id,
-  classes,
-  value,
-  onChange,
-}: {
-  id: string
-  classes: ClassItem[]
-  value: string
-  onChange: (v: string) => void
-}) {
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger id={id} className="w-full">
-        <SelectValue placeholder="Chọn lớp" />
-      </SelectTrigger>
-      <SelectContent>
-        {classes.map((c) => (
-          <SelectItem key={c.id} value={String(c.id)}>
-            {c.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  )
-}
-
-// Học sinh của lớp đã chọn; học sinh đã có tài khoản thì không chọn được (BE trả 409).
-// Chỉ render khi đã chọn lớp: useStudents không có classid sẽ tải toàn trường
-function StudentSelect({
-  id,
-  classid,
-  taken,
-  value,
-  onChange,
-}: {
-  id: string
-  classid: number
-  taken: Set<number>
-  value: string
-  onChange: (v: string) => void
-}) {
-  const students = useStudents({ classid })
-  if (students.error) return <p className="text-sm text-destructive">{errorMessage(students.error).title}</p>
-  return (
-    <Select value={value} onValueChange={onChange} disabled={students.isLoading}>
-      <SelectTrigger id={id} className="w-full">
-        <SelectValue placeholder={students.isLoading ? "Đang tải..." : "Chọn học sinh"} />
-      </SelectTrigger>
-      <SelectContent>
-        {(students.data ?? []).map((st) => (
-          <SelectItem key={st.id} value={String(st.id)} disabled={taken.has(st.id)}>
-            {st.name} · {st.code}
-            {taken.has(st.id) && " (đã có tài khoản)"}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  )
-}
 
 function CreateAccountDialog({ accounts, teachers, classes }: { accounts: Account[]; teachers: Teacher[]; classes: ClassItem[] }) {
   const [open, setOpen] = useState(false)

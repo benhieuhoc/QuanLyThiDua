@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { GraduationCap } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useMe } from "@/hooks/use-data"
+import { useViewer } from "@/hooks/use-data"
 import { isActive, navSectionsFor } from "./nav"
 
 export function Brand() {
@@ -23,13 +23,14 @@ export function Brand() {
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
-  // Chưa biết loại tài khoản thì chưa hiện menu, tránh lộ mục không được phép
-  const me = useMe().data
+  // Chưa biết người xem thì chưa hiện menu, tránh lộ mục không được phép; khách chỉ thấy Tổng quan
+  const { me, guest } = useViewer()
+  const sections = me ? navSectionsFor(me.kind) : guest ? navSectionsFor(null) : []
 
   return (
     // Cuộn riêng khi menu dài hơn chiều cao màn hình; -mx-1/px-1 để vòng focus không bị cắt
     <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-1">
-      {(me ? navSectionsFor(me.kind) : []).map((section) => (
+      {sections.map((section) => (
         <div key={section.title} className="flex flex-col gap-1">
           <p className="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
             {section.title}

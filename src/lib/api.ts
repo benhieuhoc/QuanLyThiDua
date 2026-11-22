@@ -1,5 +1,5 @@
 import { mutate } from "swr"
-import type { Account, FieldError, LoginResult } from "./types"
+import type { Account, FieldError, LoginResult, ParentLoginResult } from "./types"
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"
 
@@ -70,48 +70,56 @@ function unwrap<T>(ok: boolean, status: number, body: ApiBody) {
 }
 
 // Token đăng nhập (JWT, hết hạn sau 30 phút, BE chưa có refresh) lưu ở localStorage để giữ qua tải lại trang.
+// Token giáo viên / cờ đỏ và token phụ huynh lưu tách nhau: BE chỉ nhận token phụ huynh ở /auth/parent/*.
 // Truy cập storage có thể ném lỗi (chế độ riêng tư, chặn dữ liệu trang) nên luôn bọc try/catch
 const TOKEN_KEY = "qllh.token"
+const PARENT_TOKEN_KEY = "qllh.parentToken"
 export const LOGIN_PATH = "/dang-nhap"
+export const PARENT_LOGIN_PATH = "/dang-nhap/phu-huynh"
+const HOME_PATH = "/"
 
-export function getToken() {
+function readStorage(key: string) {
   try {
-    return typeof window === "undefined" ? null : window.localStorage.getItem(TOKEN_KEY)
+    return typeof window === "undefined" ? null : window.localStorage.getItem(key)
   } catch {
     return null
   }
 }
 
-export function setToken(token: string) {
+function writeStorage(key: string, value: string | null) {
   try {
-    window.localStorage.setItem(TOKEN_KEY, token)
+    if (value === null) window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, value)
   } catch {
-    // Không lưu được token: lần gọi API sau sẽ chuyển về trang đăng nhập
+    // Không lưu được token: lần gọi API sau coi như chưa đăng nhập
   }
 }
 
-export function clearToken() {
-  try {
-    window.localStorage.removeItem(TOKEN_KEY)
-  } catch {
-    // Bỏ qua
-  }
+export const getToken = () => readStorage(TOKEN_KEY)
+export const setToken = (token: string) => writeStorage(TOKEN_KEY, token)
+export const clearToken = () => writeStorage(TOKEN_KEY, null)
+
+export const getParentToken = () => readStorage(PARENT_TOKEN_KEY)
+export const clearParentToken = () => writeStorage(PARENT_TOKEN_KEY, null)
+
+// Chưa đăng nhập không còn bị chuyển sang trang đăng nhập mà về Tổng quan (chế độ khách).
+// Điều hướng cứng để xóa toàn bộ cache SWR của phiên cũ; đang ở Tổng quan thì xóa tài khoản cũ trong cache và tải lại /auth/me
+function goHomeAsGuest() {
+  if (typeof window === "undefined") return
+  if (window.location.pathname === HOME_PATH) void mutate("/auth/me", undefined)
+  else window.location.replace(HOME_PATH)
 }
 
-// Về trang đăng nhập bằng điều hướng cứng để xóa toàn bộ cache SWR của phiên cũ
-export function redirectToLogin() {
-  if (typeof window !== "undefined" && window.location.pathname !== LOGIN_PATH) {
-    window.location.replace(LOGIN_PATH)
-  }
-}
-
-// Đăng xuất: BE không có API logout, chỉ xóa token phía FE
+// Đăng xuất: BE không có API logout, chỉ xóa token phía FE rồi về Tổng quan (điều hướng cứng để xóa cache)
 export function logout() {
   clearToken()
-  redirectToLogin()
+  if (typeof window !== "undefined") window.location.replace(HOME_PATH)
 }
 
 const UNAUTHORIZED = "Chưa đăng nhập"
+
+// 401: chưa đăng nhập (không có token) hoặc phiên hết hạn
+export const isUnauthorized = (err: unknown) => err instanceof ApiError && err.status === 401
 
 // Gọi API, trả về `data` của response chuẩn { success, data, message }
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -119,11 +127,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
   const isLogin = path === "/auth/login"
   const token = getToken()
-  // Chưa có token thì không gọi BE (chắc chắn 401)
-  if (!token && !isLogin) {
-    redirectToLogin()
-    throw new ApiError(UNAUTHORIZED, 401)
-  }
+  // Chưa có token thì không gọi BE (chắc chắn 401); không chuyển trang vì khách vẫn xem được Tổng quan
+  if (!token && !isLogin) throw new ApiError(UNAUTHORIZED, 401)
 
   let res: Response
   try {
@@ -143,7 +148,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   // 401 ngoài /auth/login: token hết hạn hoặc tài khoản bị khóa / xóa
   if (res.status === 401 && !isLogin) {
     clearToken()
-    redirectToLogin()
+    goHomeAsGuest()
   }
   return unwrap<T>(res.ok, res.status, body)
 }
@@ -188,10 +193,7 @@ function downloadName(disposition: string | null, fallback: string) {
 export async function apiDownload(path: string, fallbackName = "download.xlsx") {
   if (DEMO_MODE) throw new ApiError("Bản demo không hỗ trợ tải file", 403)
   const token = getToken()
-  if (!token) {
-    redirectToLogin()
-    throw new ApiError(UNAUTHORIZED, 401)
-  }
+  if (!token) throw new ApiError(UNAUTHORIZED, 401)
 
   let res: Response
   try {
@@ -203,7 +205,7 @@ export async function apiDownload(path: string, fallbackName = "download.xlsx") 
     const body: ApiBody = await res.json().catch(() => null)
     if (res.status === 401) {
       clearToken()
-      redirectToLogin()
+      goHomeAsGuest()
     }
     throw new ApiError(body?.message ?? "Không tải được file", res.status, body?.errors)
   }
@@ -226,6 +228,50 @@ export async function login(username: string, password: string) {
   const result = await apiPost<LoginResult>("/auth/login", { username, password })
   setToken(result.token)
   return result
+}
+
+// API của phụ huynh (/auth/parent/*): gửi token phụ huynh, không đụng token giáo viên.
+// 401 (hết hạn, bị khóa / xóa) → xóa token phụ huynh, trang đăng nhập phụ huynh hiện lại form
+export async function parentApi<T>(path: string, init?: RequestInit): Promise<T> {
+  const isLogin = path === "/auth/parent/login"
+  const token = getParentToken()
+  if (!token && !isLogin) throw new ApiError(UNAUTHORIZED, 401)
+  if (DEMO_MODE) return demoApi<T>(path, init)
+
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && !isLogin ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
+    })
+  } catch {
+    throw new ApiError("Không kết nối được máy chủ", 0)
+  }
+  const body = await res.json().catch(() => null)
+  if (res.status === 401 && !isLogin) clearParentToken()
+  return unwrap<T>(res.ok, res.status, body)
+}
+
+export const parentFetcher = <T>(path: string) => parentApi<T>(path)
+
+// POST /auth/parent/login → lưu token phụ huynh; 401 sai tài khoản / mật khẩu, 403 tài khoản bị khóa
+export async function parentLogin(username: string, password: string) {
+  const result = await parentApi<ParentLoginResult>("/auth/parent/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  })
+  writeStorage(PARENT_TOKEN_KEY, result.token)
+  return result
+}
+
+// Đăng xuất phụ huynh: chỉ xóa token phụ huynh, tải lại /auth/parent/me để trang hiện lại form
+export function parentLogout() {
+  clearParentToken()
+  void mutate("/auth/parent/me", undefined)
 }
 
 // Dữ liệu các bảng liên quan nhau (tên lớp phụ thuộc phân hiệu, GV kèm lớp chủ nhiệm)

@@ -2,7 +2,8 @@
 // Chạy: npm run snapshot:demo (BE ở NEXT_PUBLIC_API_URL hoặc http://localhost:3001)
 // BE bắt buộc đăng nhập: cần biến môi trường SNAPSHOT_USERNAME, SNAPSHOT_PASSWORD của một tài khoản admin
 // để đọc được mọi dữ liệu. Bản demo không đăng nhập: người xem có quyền admin (DEMO_VIEWER trong src/lib/api.ts),
-// nên không chụp /auth/me. Có chụp /accounts cho trang Tài khoản (không có mật khẩu, nhưng lộ tên đăng nhập).
+// nên không chụp /auth/me. Có chụp /accounts cho trang Tài khoản và /parents cho trang Phụ huynh
+// (không có mật khẩu, nhưng lộ tên đăng nhập).
 // Ngoài POST /auth/login chỉ gọi GET, theo đúng các key SWR trong src/hooks/use-data.ts.
 import { mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -75,7 +76,7 @@ const [branches, grades, classes, schoolYears] = await Promise.all(
 if (!branches || !grades || !classes || !schoolYears) {
   throw new Error(`Không đọc được dữ liệu từ ${API_URL}; kiểm tra BE đang chạy`)
 }
-await snapshotAll(["/teachers", "/weeks/current", "/accounts", "/rules"])
+await snapshotAll(["/teachers", "/weeks/current", "/accounts", "/rules", "/parents"])
 // Trang Lớp học, mục "Đã ra trường": danh sách + dialog học sinh của từng lớp lưu trữ
 const archivedClasses = (await snapshot("/classes?archived=true")) ?? []
 await snapshotAll(archivedClasses.map((c) => `/classes/${c.id}`))
@@ -92,6 +93,8 @@ await snapshotAll([
   ...scopes.filter((scope) => toQuery(scope)).map((scope) => `/students?${toQuery(scope)}`),
   ...classes.map((c) => `/students?classid=${c.id}`),
   ...classes.map((c) => `/classes/${c.id}`),
+  // Trang Phụ huynh: lọc theo lớp
+  ...classes.map((c) => `/parents?classid=${c.id}`),
   // Trang Điểm lớp: mọi lượt chấm của lớp
   ...classes.map((c) => `/points?classid=${c.id}`),
   // Lịch sử lượt chấm của từng học sinh

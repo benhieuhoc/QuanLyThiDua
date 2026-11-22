@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { ChevronDown, Eye, KeyRound, LogOut, Menu } from "lucide-react"
 import { apiPut, DEMO_MODE, logout } from "@/lib/api"
 import { accountDisplay } from "@/lib/auth"
-import { useMe } from "@/hooks/use-data"
+import { useViewer } from "@/hooks/use-data"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { runMutation } from "@/components/common"
 import { Brand, SidebarNav } from "./sidebar-nav"
+import { LoginButtons } from "./login-buttons"
 import { isActive, navItems } from "./nav"
 
 // Giới hạn theo BE: mật khẩu mới 6 ký tự – 72 byte, khác mật khẩu cũ
@@ -38,7 +39,17 @@ const MIN_PASSWORD = 6
 const MAX_PASSWORD_BYTES = 72
 const byteLength = (value: string) => new TextEncoder().encode(value).length
 
-function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+// Đổi mật khẩu của người đang đăng nhập. Mặc định gọi PUT /auth/password (giáo viên / cờ đỏ);
+// trang phụ huynh truyền `submit` gọi PUT /auth/parent/password bằng token phụ huynh
+export function ChangePasswordDialog({
+  open,
+  onOpenChange,
+  submit: send = (body) => apiPut("/auth/password", body),
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  submit?: (body: { oldPassword: string; newPassword: string }) => Promise<unknown>
+}) {
   const [oldPassword, setOldPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirm, setConfirm] = useState("")
@@ -68,7 +79,7 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     e.preventDefault()
     if (!valid) return
     setPending(true)
-    const ok = await runMutation(() => apiPut("/auth/password", { oldPassword, newPassword }), "Đã đổi mật khẩu")
+    const ok = await runMutation(() => send({ oldPassword, newPassword }), "Đã đổi mật khẩu")
     setPending(false)
     if (ok) onOpenChange(false)
   }
@@ -140,9 +151,11 @@ const initials = (name: string) =>
     .join("")
 
 function AccountMenu() {
-  const me = useMe().data
+  const { me, guest } = useViewer()
   const [passwordOpen, setPasswordOpen] = useState(false)
 
+  // Khách: hai nút đăng nhập riêng cho phụ huynh và giáo viên – cờ đỏ
+  if (guest) return <LoginButtons compact />
   if (!me) return null
   // Bản demo không đăng nhập: không có đổi mật khẩu / đăng xuất
   if (DEMO_MODE) {

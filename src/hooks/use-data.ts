@@ -1,7 +1,7 @@
 "use client"
 
 import useSWR from "swr"
-import { ApiError, fetcher, publicApi } from "@/lib/api"
+import { ApiError, fetcher, isUnauthorized, parentFetcher, publicApi } from "@/lib/api"
 import type {
   Account,
   Branch,
@@ -9,8 +9,14 @@ import type {
   ClassItem,
   ClassScore,
   Grade,
+  Parent,
+  ParentMe,
+  ParentPoints,
   PeriodType,
   PublicClassPage,
+  PublicMeta,
+  PublicRanking,
+  PublicScorePeriods,
   Point,
   Ranking,
   Rule,
@@ -23,11 +29,38 @@ import type {
   WeeklyScore,
 } from "@/lib/types"
 
-// Tài khoản đang đăng nhập; 401 đã được api() chuyển về trang đăng nhập nên không thử lại
+// Tài khoản đang đăng nhập. 401 = khách (chưa đăng nhập / phiên hết hạn): chỉ xem được Tổng quan, không thử lại
 export const useMe = () =>
   useSWR<Account>("/auth/me", fetcher, {
-    shouldRetryOnError: (err) => !(err instanceof ApiError && err.status === 401),
+    shouldRetryOnError: (err) => !isUnauthorized(err),
   })
+
+// Người xem hiện tại: `guest` khi chưa đăng nhập / phiên hết hạn (401). SWR giữ dữ liệu cũ khi lỗi nên bỏ `data`
+// lúc 401 để không hiện tài khoản của phiên đã hết hạn
+export function useViewer() {
+  const { data, error, isLoading, mutate } = useMe()
+  const guest = isUnauthorized(error)
+  return { me: guest ? undefined : data, guest, error: guest ? undefined : error, isLoading, mutate }
+}
+
+// Phụ huynh đang đăng nhập (token phụ huynh riêng). 401 = chưa đăng nhập, không thử lại
+export const useParentMe = () =>
+  useSWR<ParentMe>("/auth/parent/me", parentFetcher, {
+    shouldRetryOnError: (err) => !isUnauthorized(err),
+  })
+
+// Lượt chấm có gắn con của phụ huynh đang đăng nhập; không truyền schoolyearid thì BE lấy năm đã bắt đầu gần nhất.
+// Chỉ gọi khi đã có /auth/parent/me (component dùng hook chỉ render khi đó)
+export const useParentPoints = (schoolyearid?: number) =>
+  useSWR<ParentPoints>(
+    `/auth/parent/points${schoolyearid ? `?schoolyearid=${schoolyearid}` : ""}`,
+    parentFetcher,
+    { shouldRetryOnError: (err) => !(err instanceof ApiError && err.status >= 400 && err.status < 500) }
+  )
+
+// Chỉ admin gọi được. Không lọc thì BE bỏ phụ huynh của học sinh lớp đã ra trường
+export const useParents = (classid?: number) =>
+  useSWR<Parent[]>(classid ? `/parents?classid=${classid}` : "/parents", fetcher)
 
 // Chỉ admin gọi được (BE trả 403 với tài khoản khác)
 export const useAccounts = () => useSWR<Account[]>("/accounts", fetcher)
@@ -117,6 +150,20 @@ export const usePublicClass = (qrcode?: string, schoolyearid?: number) =>
       // Giữ dữ liệu năm đang xem khi đổi năm học để ô chọn năm không biến mất lúc tải
       keepPreviousData: true,
     }
+  )
+
+// Tổng quan công khai cho khách: không gửi token, lỗi 401 không xảy ra
+export const usePublicMeta = (enabled = true) => useSWR<PublicMeta>(enabled ? "/public/meta" : null, publicApi)
+
+export const usePublicPeriods = (schoolyearid?: number) =>
+  useSWR<PublicScorePeriods>(schoolyearid ? `/public/scores/periods?schoolyearid=${schoolyearid}` : null, publicApi)
+
+// 409 (tuần chưa bắt đầu) và lỗi 4xx khác là kết quả xác định, không thử lại
+export const usePublicWeekRanking = (schoolyearid?: number, week?: number) =>
+  useSWR<PublicRanking>(
+    schoolyearid && week ? `/public/scores/ranking?${toQuery({ schoolyearid, week })}` : null,
+    publicApi,
+    { shouldRetryOnError: (err) => !(err instanceof ApiError && err.status >= 400 && err.status < 500) }
   )
 
 export const useClassScore = (classid?: number, schoolyearid?: number) =>

@@ -71,7 +71,7 @@ export function WeekPickerControls({ picker }: { picker: WeekPicker }) {
   )
 }
 
-export function WeekStatus({ week }: { week: Week }) {
+export function WeekStatus({ week }: { week: Pick<Week, "locked"> }) {
   return week.locked ? (
     <Badge variant="secondary">
       <Lock /> Đã khóa

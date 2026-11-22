@@ -273,6 +273,34 @@ export type Ranking = {
   scores: RankingRow[]
 }
 
+// Trang tổng quan công khai (khách chưa đăng nhập): GET /public/meta, /public/scores/periods, /public/scores/ranking.
+// Số liệu giống /scores/periods, /scores/ranking; năm học chỉ có cột công khai, dòng xếp hạng không có teacherid
+export type PublicSchoolYearInfo = Omit<SchoolYear, "created_at" | "updated_at">
+
+export type PublicMeta = {
+  // Mới nhất trước
+  schoolyears: PublicSchoolYearInfo[]
+  // null: hôm nay ngoài mọi tuần
+  currentweek: {
+    id: number
+    schoolyearid: number
+    schoolyearname: string
+    numweek: number
+    startdate: string
+    enddate: string
+    locked: boolean
+  } | null
+  branches: Pick<Branch, "id" | "name" | "code">[]
+  grades: Grade[]
+}
+
+export type PublicScorePeriods = Omit<ScorePeriods, "schoolyear"> & { schoolyear: PublicSchoolYearInfo }
+
+export type PublicRanking = Omit<Ranking, "schoolyear" | "scores"> & {
+  schoolyear: PublicSchoolYearInfo
+  scores: Omit<RankingRow, "teacherid">[]
+}
+
 export type SummaryScore = { schoolyear: SchoolYear; fromweek: number; toweek: number; scores: SummaryRow[] }
 
 // rank của từng tuần là hạng toàn trường
@@ -312,6 +340,77 @@ export type Account = {
 }
 
 export type LoginResult = { token: string; account: Account }
+
+// Phụ huynh (bảng parent của BE, không phải tài khoản giáo viên): mỗi bản ghi là cha hoặc mẹ của 1 học sinh.
+// Lớp suy từ lớp hiện tại của học sinh. GET /parents (chỉ admin), không bao giờ có password
+export type ParentRelation = "Cha" | "Mẹ"
+
+export type Parent = {
+  id: number
+  name: string
+  relation: ParentRelation
+  studentid: number
+  // null: chưa có tài khoản đăng nhập
+  username: string | null
+  hasaccount: boolean
+  active: boolean
+  created_at: string
+  updated_at: string
+  studentcode: string
+  studentname: string
+  classid: number
+  classname: string
+  gradeid: number
+  branchid: number
+  archivedyearid: number | null
+}
+
+// GET /auth/parent/me (token phụ huynh)
+export type ParentMe = {
+  id: number
+  name: string
+  relation: ParentRelation
+  username: string
+  studentid: number
+  studentcode: string
+  studentname: string
+  studentgender: Gender | null
+  studentbirthdate: string | null
+  classid: number
+  classname: string
+  numgrade: number
+  branchcode: string
+  branchname: string
+  teachername: string | null
+  archivedyearid: number | null
+  // "/LopHoc/<qrcode>": trang lớp công khai của con
+  BaseQRCode: string
+}
+
+export type ParentLoginResult = { token: string; parent: ParentMe }
+
+// GET /auth/parent/points?schoolyearid= (token phụ huynh): lượt chấm có gắn con trong 1 năm học, mới nhất trước.
+// value là điểm của cả lượt (lượt có thể gắn nhiều học sinh); classname là tên lớp lúc chấm
+export type ParentPoint = {
+  id: number
+  weekid: number
+  numweek: number
+  locked: boolean
+  type: PointType
+  content: string
+  value: number
+  pointdate: string
+  classid: number
+  classname: string
+}
+
+export type ParentPoints = {
+  // null: chưa có năm học nào (points = [], summary toàn 0)
+  schoolyear: { id: number; name: string; startdate: string; enddate: string } | null
+  points: ParentPoint[]
+  // minus là số dương; total = plus - minus
+  summary: { count: number; plus: number; minus: number; total: number }
+}
 
 // GET /public/classes/:qrcode?schoolyearid= (không cần đăng nhập): trang lớp cho phụ huynh quét mã QR.
 // Chỉ có thông tin lớp và kết quả thi đua, không có học sinh hay người chấm

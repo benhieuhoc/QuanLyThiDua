@@ -2,13 +2,14 @@
 
 import { useState } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { useParams } from "next/navigation"
-import { ChevronDown, GraduationCap, SearchX, Trophy, WifiOff } from "lucide-react"
-import { ApiError } from "@/lib/api"
+import { ChevronDown, GraduationCap, SearchX, Trophy, UserRound, WifiOff } from "lucide-react"
+import { ApiError, errorMessage, isUnauthorized, PARENT_LOGIN_PATH } from "@/lib/api"
 import { formatDayLabel, formatRange } from "@/lib/format"
-import type { PublicWeek } from "@/lib/types"
+import type { ParentMe, PublicWeek } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { usePublicClass } from "@/hooks/use-data"
+import { useParentMe, useParentPoints, usePublicClass } from "@/hooks/use-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -16,13 +17,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState, IconTile, TableSkeleton } from "@/components/common"
 import { ClassName, SignedValue } from "@/components/scores"
 
-// Trang cho phụ huynh (không đăng nhập, chủ yếu mở trên điện thoại sau khi quét QR):
-// chỉ dùng GET /public/classes/:id, không gọi API cần token
+// Trang cho phụ huynh (chủ yếu mở trên điện thoại sau khi quét QR): kết quả lớp từ GET /public/classes/:qrcode (không token).
+// Phụ huynh đã đăng nhập (token phụ huynh) và đang xem lớp của con thì có thêm khung lượt chấm của con (/auth/parent/points)
 export function PublicClassView() {
   // Mã QR là chuỗi ngẫu nhiên do BE cấp, truyền nguyên vào API (BE kiểm tra định dạng)
   const { qrcode } = useParams<{ qrcode: string }>()
   const [schoolyearid, setSchoolyearid] = useState<number>()
   const page = usePublicClass(qrcode, schoolyearid)
+  // Không có token phụ huynh: useParentMe lỗi 401 ngay (không gọi BE), không hiện khung của con
+  const parent = useParentMe()
+  const parentMe = isUnauthorized(parent.error) ? undefined : parent.data
 
   // 404 (mã sai / đã đổi, lớp không có ở năm học) và 400 (năm học sai) đều báo không tìm thấy
   const notFound = page.error instanceof ApiError && (page.error.status === 400 || page.error.status === 404)
@@ -131,6 +135,10 @@ export function PublicClassView() {
             </Card>
           ) : (
             <>
+              {/* classid trong /auth/parent/me là lớp hiện tại của con, trùng class.id của trang công khai */}
+              {parentMe && parentMe.classid === data.class.id && (
+                <ChildPoints parent={parentMe} schoolyearid={data.schoolyear.id} classid={data.class.id} />
+              )}
               <LatestWeek week={latest} />
               {earlier.length > 0 && (
                 <section className="grid gap-2">
@@ -205,12 +213,8 @@ function PointList({ points }: { points: PublicWeek["points"] }) {
         // Lượt chấm công khai không có id; danh sách cố định theo response nên dùng vị trí làm key
         <li key={i} className="flex items-start justify-between gap-3 py-2 text-sm">
           <div className="min-w-0">
+            {/* Không hiện tên học sinh trên trang công khai (yêu cầu 2026-11-22); phụ huynh xem lượt chấm của con ở khung riêng */}
             <p className="break-words">{p.content}</p>
-            {p.students.length > 0 && (
-              <p className="break-words text-xs font-medium text-foreground/80">
-                {p.students.map((s) => s.name).join(", ")}
-              </p>
-            )}
             <p className="text-xs text-muted-foreground">
               {p.type} · {formatDayLabel(p.pointdate)}
             </p>
@@ -219,6 +223,80 @@ function PointList({ points }: { points: PublicWeek["points"] }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+function SummaryBox({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
+  return (
+    <div className="rounded-xl bg-muted/60 px-2 py-2 text-center">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={cn("text-lg font-semibold tabular-nums", className)}>{value}</p>
+    </div>
+  )
+}
+
+// Lượt chấm có gắn con trong năm học đang xem (gồm cả lượt ở lớp cũ nếu con đã chuyển lớp, ghi kèm tên lớp).
+// Điểm là điểm của cả lượt, lượt có thể gắn nhiều học sinh
+function ChildPoints({ parent, schoolyearid, classid }: { parent: ParentMe; schoolyearid: number; classid: number }) {
+  const res = useParentPoints(schoolyearid)
+  // 401: phiên phụ huynh hết hạn hoặc bị khóa (token đã bị xóa), ẩn khung
+  if (isUnauthorized(res.error)) return null
+  const data = res.data
+
+  return (
+    <Card className="gap-3 px-4 py-4">
+      <div className="flex items-start gap-3">
+        <IconTile icon={UserRound} tone="sky" />
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold">Lượt chấm của con: {parent.studentname}</h2>
+          <p className="text-xs text-muted-foreground">
+            {data?.schoolyear ? `Năm học ${data.schoolyear.name} · ` : ""}
+            <Link href={PARENT_LOGIN_PATH} className="text-primary hover:underline">
+              Trang phụ huynh
+            </Link>
+          </p>
+        </div>
+      </div>
+
+      {res.error ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <span>{errorMessage(res.error).title}</span>
+          <Button variant="outline" size="sm" onClick={() => res.mutate()}>
+            Thử lại
+          </Button>
+        </div>
+      ) : !data ? (
+        <TableSkeleton rows={3} />
+      ) : (
+        <>
+          <div className="grid grid-cols-4 gap-2">
+            <SummaryBox label="Số lượt" value={data.summary.count} />
+            <SummaryBox label="Cộng" value={`+${data.summary.plus}`} className="text-emerald-700" />
+            <SummaryBox label="Trừ" value={`−${data.summary.minus}`} className="text-rose-700" />
+            <SummaryBox label="Tổng" value={<SignedValue value={data.summary.total} />} />
+          </div>
+          {data.points.length === 0 ? (
+            <p className="py-2 text-sm text-muted-foreground">Chưa có lượt cộng / trừ điểm nào gắn với con trong năm học này.</p>
+          ) : (
+            <ul className="-mx-1 max-h-80 divide-y divide-border/70 overflow-y-auto px-1">
+              {data.points.map((p) => (
+                <li key={p.id} className="flex items-start justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="break-words">{p.content}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {p.type} · Tuần {p.numweek} · {formatDayLabel(p.pointdate)}
+                      {p.classid !== classid && ` · lớp ${p.classname}`}
+                    </p>
+                  </div>
+                  <SignedValue value={p.value} />
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-muted-foreground">Điểm là điểm của cả lượt chấm, một lượt có thể gắn nhiều học sinh.</p>
+        </>
+      )}
+    </Card>
   )
 }
 
