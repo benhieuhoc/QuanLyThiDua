@@ -3,7 +3,6 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { ArrowLeft, ArrowRight, KeyRound, LogIn, LogOut } from "lucide-react"
 import { errorMessage, isUnauthorized, LOGIN_PATH, parentApi, parentLogin, parentLogout } from "@/lib/api"
 import type { ParentMe } from "@/lib/types"
@@ -18,15 +17,14 @@ import { ChangePasswordDialog } from "@/components/layout/app-header"
 // Phụ huynh đăng nhập bằng tài khoản riêng (POST /auth/parent/login, token lưu tách khỏi token giáo viên).
 // BE chỉ cho token phụ huynh gọi /auth/parent/*; kết quả thi đua xem ở trang lớp công khai BaseQRCode
 export function ParentLoginView() {
-  const router = useRouter()
   const parent = useParentMe()
   // SWR giữ dữ liệu cũ khi lỗi: 401 (hết hạn, bị khóa) thì coi như chưa đăng nhập
   const loggedOut = isUnauthorized(parent.error)
   const me = loggedOut ? undefined : parent.data
 
+  // Đăng nhập xong ở lại trang, hiện ParentPanel (có nút sang trang kết quả thi đua của lớp)
   const onLoggedIn = (result: ParentMe) => {
     void parent.mutate(result, { revalidate: false })
-    router.push(result.BaseQRCode)
   }
 
   return (

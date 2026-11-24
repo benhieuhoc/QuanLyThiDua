@@ -8,6 +8,7 @@ import type {
   ClassDetail,
   ClassItem,
   ClassScore,
+  FolderContents,
   Grade,
   Parent,
   ParentMe,
@@ -76,6 +77,12 @@ export const useArchivedClasses = (enabled = true) =>
   useSWR<ClassItem[]>(enabled ? "/classes?archived=true" : null, fetcher)
 
 export const useClass = (id?: number) => useSWR<ClassDetail>(id ? `/classes/${id}` : null, fetcher)
+
+// Nội dung 1 thư mục của kho tài liệu; không có id = thư mục gốc. 400/404 (id sai, thư mục đã xóa) không thử lại
+export const useFolder = (id?: number) =>
+  useSWR<FolderContents>(id ? `/folders/${id}` : "/folders", fetcher, {
+    shouldRetryOnError: (err) => !(err instanceof ApiError && err.status >= 400 && err.status < 500),
+  })
 
 // Quy chế thi đua: tải toàn bộ (cả mục ngừng áp dụng), lọc theo phần / active ở client
 export const useRules = () => useSWR<Rule[]>("/rules", fetcher)

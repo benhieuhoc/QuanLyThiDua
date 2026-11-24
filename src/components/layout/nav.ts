@@ -3,6 +3,7 @@ import {
   CalendarRange,
   ChartColumn,
   ClipboardPen,
+  FolderOpen,
   GraduationCap,
   KeyRound,
   LayoutDashboard,
@@ -45,6 +46,8 @@ export const navSections: NavSection[] = [
       { href: "/cham-diem", label: "Chấm điểm", icon: ClipboardPen },
       { href: "/tong-hop", label: "Xếp hạng", icon: Trophy, roles: STAFF },
       { href: "/diem-lop", label: "Điểm lớp", icon: ChartColumn, roles: STAFF },
+      // BE cho mọi tài khoản (admin, GVCN, cờ đỏ) xem / tải; chỉ admin tạo, sửa, xóa
+      { href: "/tai-lieu", label: "Tài liệu", icon: FolderOpen },
     ],
   },
   {

@@ -473,3 +473,45 @@ export type PublicClassPage = {
 }
 
 export type FieldError ={ field?: string; message: string; [key: string]: unknown }
+
+// Kho tài liệu (/folders, /files; BE docs/logic-trien-khai.md mục 9.14). created_at / updated_at là ISO có giờ (timestamptz)
+export type Folder = {
+  id: number
+  name: string
+  // null = thư mục gốc
+  parentid: number | null
+  accountid: number | null
+  // Người tạo; null = tài khoản đã xóa
+  accountusername: string | null
+  numfolders: number
+  numfiles: number
+  created_at: string
+  updated_at: string
+}
+
+export type FileItem = {
+  id: number
+  // null = thư mục gốc
+  folderid: number | null
+  // Tên hiển thị kèm đuôi
+  name: string
+  mimetype: string
+  // Byte
+  size: number
+  accountid: number | null
+  // Người tải lên; null = tài khoản đã xóa
+  accountusername: string | null
+  created_at: string
+  updated_at: string
+}
+
+// GET /folders (gốc: folder null, path []) và GET /folders/:id; path là breadcrumb từ gốc, gồm chính thư mục
+export type FolderContents = {
+  folder: Folder | null
+  path: { id: number; name: string }[]
+  folders: Folder[]
+  files: FileItem[]
+}
+
+// DELETE /folders/:id: thư mục trước khi xóa + số thư mục / file đã xóa (kể cả chính nó với recursive)
+export type DeletedFolder = Folder & { deletedfolders: number; deletedfiles: number }

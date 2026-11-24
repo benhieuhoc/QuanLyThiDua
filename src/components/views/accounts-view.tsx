@@ -27,7 +27,6 @@ import {
 import {
   ClassSelect,
   ConfirmDelete,
-  EmptyState,
   ErrorState,
   PageHeader,
   PasswordField,
@@ -50,9 +49,22 @@ const kindTone: Record<AccountKind, string> = {
 }
 
 
-function CreateAccountDialog({ accounts, teachers, classes }: { accounts: Account[]; teachers: Teacher[]; classes: ClassItem[] }) {
+function CreateAccountDialog({
+  accounts,
+  teachers,
+  classes,
+  defaultKind = "gvcn",
+  trigger,
+}: {
+  accounts: Account[]
+  teachers: Teacher[]
+  classes: ClassItem[]
+  // Loại chọn sẵn khi mở (nút thêm của từng khung loại tài khoản)
+  defaultKind?: AccountKind
+  trigger?: React.ReactNode
+}) {
   const [open, setOpen] = useState(false)
-  const [kind, setKind] = useState<AccountKind>("gvcn")
+  const [kind, setKind] = useState<AccountKind>(defaultKind)
   const [teacherId, setTeacherId] = useState(NONE)
   const [classId, setClassId] = useState("")
   const [studentId, setStudentId] = useState("")
@@ -66,7 +78,7 @@ function CreateAccountDialog({ accounts, teachers, classes }: { accounts: Accoun
 
   const onOpenChange = (next: boolean) => {
     if (next) {
-      setKind("gvcn")
+      setKind(defaultKind)
       setTeacherId(NONE)
       setClassId("")
       setStudentId("")
@@ -113,9 +125,11 @@ function CreateAccountDialog({ accounts, teachers, classes }: { accounts: Accoun
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus /> Tạo tài khoản
-        </Button>
+        {trigger ?? (
+          <Button>
+            <Plus /> Tạo tài khoản
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <form onSubmit={submit} className="grid gap-4">
@@ -407,19 +421,169 @@ function LinkedTo({ account }: { account: Account }) {
   )
 }
 
+// Mỗi loại tài khoản một khung riêng, cột theo loại: Quản lý nề nếp / GVCN gắn giáo viên, cờ đỏ gắn học sinh + lớp chấm
+const KIND_SECTIONS: Record<AccountKind, { description: string; linkedLabel: string; empty: string }> = {
+  admin: {
+    description: "Giáo viên quản lý nề nếp: chấm mọi lớp, sửa toàn bộ dữ liệu.",
+    linkedLabel: "Giáo viên",
+    empty: "Chưa có tài khoản quản lý nề nếp",
+  },
+  gvcn: {
+    description: "Giáo viên chủ nhiệm: xem mọi trang, không chấm điểm.",
+    linkedLabel: "Giáo viên",
+    empty: "Chưa có tài khoản GVCN",
+  },
+  codo: {
+    description: "Học sinh cờ đỏ: chấm các lớp được phân công.",
+    linkedLabel: "Học sinh",
+    empty: "Chưa có tài khoản cờ đỏ",
+  },
+}
+
+function StatusBadge({ active }: { active: boolean }) {
+  return active ? (
+    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+      Hoạt động
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="text-muted-foreground">
+      <Lock /> Đã khóa
+    </Badge>
+  )
+}
+
+function AccountSection({
+  kind,
+  rows,
+  total,
+  searching,
+  me,
+  accounts,
+  teachers,
+  classes,
+}: {
+  kind: AccountKind
+  // Tài khoản của loại này sau khi lọc theo từ khóa
+  rows: Account[]
+  // Tổng số tài khoản của loại này (chưa lọc)
+  total: number
+  searching: boolean
+  me?: Account
+  accounts: Account[]
+  teachers: Teacher[]
+  classes: ClassItem[]
+}) {
+  const section = KIND_SECTIONS[kind]
+  const isCodo = kind === "codo"
+
+  return (
+    <Card className="gap-0 py-0">
+      <div className="flex flex-col gap-2 border-b border-border/70 px-4 py-3 sm:flex-row sm:items-center">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 font-semibold">
+            <Badge variant="outline" className={kindTone[kind]}>
+              {KIND_LABELS[kind]}
+            </Badge>
+            <span className="text-sm font-normal text-muted-foreground tabular-nums">
+              {searching ? `${rows.length}/${total}` : total} tài khoản
+            </span>
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{section.description}</p>
+        </div>
+        <div className="sm:ml-auto">
+          <CreateAccountDialog
+            accounts={accounts}
+            teachers={teachers}
+            classes={classes}
+            defaultKind={kind}
+            trigger={
+              <Button variant="outline" size="sm">
+                <Plus /> Thêm {KIND_LABELS[kind]}
+              </Button>
+            }
+          />
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+          {total ? "Không có tài khoản phù hợp với từ khóa." : section.empty}
+        </p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-4">Tên đăng nhập</TableHead>
+              <TableHead>{section.linkedLabel}</TableHead>
+              {isCodo && <TableHead className="hidden md:table-cell">Lớp chấm</TableHead>}
+              <TableHead>Trạng thái</TableHead>
+              <TableHead className="w-36 pr-4" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((a) => {
+              const self = a.id === me?.id
+              return (
+                <TableRow key={a.id}>
+                  <TableCell className="pl-4 font-mono text-sm">
+                    {a.username}
+                    {self && <span className="ml-1 font-sans text-xs text-muted-foreground">(bạn)</span>}
+                  </TableCell>
+                  <TableCell>
+                    <LinkedTo account={a} />
+                  </TableCell>
+                  {isCodo && (
+                    <TableCell className="hidden text-sm md:table-cell">
+                      {a.classes.length ? (
+                        a.classes.map((c) => c.name).join(", ")
+                      ) : (
+                        <span className="text-amber-700">Chưa phân công</span>
+                      )}
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    <StatusBadge active={a.active} />
+                  </TableCell>
+                  <TableCell className="pr-4">
+                    <div className="flex justify-end gap-1">
+                      {isCodo && <AssignClassesDialog account={a} classes={classes} />}
+                      <EditAccountDialog account={a} />
+                      {/* BE không cho tự khóa / tự xóa tài khoản đang dùng */}
+                      {!self && <ToggleActiveButton account={a} />}
+                      {!self && (
+                        <ConfirmDelete
+                          title={`Xóa tài khoản ${a.username}?`}
+                          description={
+                            isCodo
+                              ? "Lượt chấm đã nhập vẫn được giữ nhưng mất tên người nhập. Cờ đỏ hết nhiệm kỳ nên Khóa thay vì xóa."
+                              : "Lượt chấm đã nhập vẫn được giữ nhưng mất tên người nhập."
+                          }
+                          onConfirm={() => apiDelete(`/accounts/${a.id}`)}
+                        />
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      )}
+    </Card>
+  )
+}
+
 export function AccountsView() {
   const accounts = useAccounts()
   const teachers = useTeachers()
   const classes = useClasses()
   const me = useMe().data
-  const [kindFilter, setKindFilter] = useState("all")
   const [query, setQuery] = useState("")
 
   const keyword = query.trim().toLowerCase()
-  const rows = (accounts.data ?? []).filter(
-    (a) =>
-      (kindFilter === "all" || a.kind === kindFilter) &&
-      [a.username, a.teachername, a.studentname].some((v) => v?.toLowerCase().includes(keyword))
+  const all = accounts.data ?? []
+  const matches = all.filter((a) =>
+    [a.username, a.teachername, a.studentname].some((v) => v?.toLowerCase().includes(keyword))
   )
 
   const error = accounts.error ?? teachers.error ?? classes.error
@@ -428,129 +592,54 @@ export function AccountsView() {
     <>
       <PageHeader
         title="Tài khoản"
-        description="Tài khoản quản lý nề nếp, giáo viên chủ nhiệm và cờ đỏ."
-        actions={
-          <CreateAccountDialog accounts={accounts.data ?? []} teachers={teachers.data ?? []} classes={classes.data ?? []} />
-        }
+        description="Tài khoản quản lý nề nếp, giáo viên chủ nhiệm và cờ đỏ, chia theo từng loại."
+        actions={<CreateAccountDialog accounts={all} teachers={teachers.data ?? []} classes={classes.data ?? []} />}
       />
 
-      <Card className="gap-0 py-0">
-        <div className="flex flex-col gap-2 border-b border-border/70 p-3 sm:flex-row sm:items-center">
-          <div className="relative sm:w-64">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Tìm theo tên đăng nhập, họ tên"
-              aria-label="Tìm tài khoản"
-              className="bg-white/70 pl-8"
-            />
-          </div>
-          <Select value={kindFilter} onValueChange={setKindFilter}>
-            <SelectTrigger className="bg-white/70 sm:w-48" aria-label="Lọc loại tài khoản">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tất cả loại</SelectItem>
-              {KINDS.map((k) => (
-                <SelectItem key={k} value={k}>
-                  {KIND_LABELS[k]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground sm:ml-auto">{rows.length} tài khoản</p>
-        </div>
-
-        {error ? (
+      {error ? (
+        <Card className="py-0">
           <ErrorState
             error={error}
             onRetry={() => (accounts.error ? accounts.mutate() : teachers.error ? teachers.mutate() : classes.mutate())}
           />
-        ) : accounts.isLoading ? (
+        </Card>
+      ) : accounts.isLoading ? (
+        <Card className="py-0">
           <TableSkeleton />
-        ) : rows.length === 0 ? (
-          <EmptyState
-            title={accounts.data?.length ? "Không có tài khoản phù hợp" : "Chưa có tài khoản"}
-            description={accounts.data?.length ? "Thử đổi bộ lọc hoặc từ khóa." : undefined}
-          />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="pl-4">Tên đăng nhập</TableHead>
-                <TableHead>Loại</TableHead>
-                <TableHead>Người dùng</TableHead>
-                <TableHead className="hidden md:table-cell">Lớp chấm</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead className="w-36 pr-4" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((a) => {
-                const self = a.id === me?.id
-                return (
-                  <TableRow key={a.id}>
-                    <TableCell className="pl-4 font-mono text-sm">
-                      {a.username}
-                      {self && <span className="ml-1 font-sans text-xs text-muted-foreground">(bạn)</span>}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={kindTone[a.kind]}>
-                        {KIND_LABELS[a.kind]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <LinkedTo account={a} />
-                    </TableCell>
-                    <TableCell className="hidden text-sm md:table-cell">
-                      {a.kind === "admin" ? (
-                        "Mọi lớp"
-                      ) : a.kind === "gvcn" ? (
-                        <span className="text-muted-foreground">Chỉ xem</span>
-                      ) : a.classes.length ? (
-                        a.classes.map((c) => c.name).join(", ")
-                      ) : (
-                        <span className="text-amber-700">Chưa phân công</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {a.active ? (
-                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                          Hoạt động
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-muted-foreground">
-                          <Lock /> Đã khóa
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="pr-4">
-                      <div className="flex justify-end gap-1">
-                        {a.kind === "codo" && <AssignClassesDialog account={a} classes={classes.data ?? []} />}
-                        <EditAccountDialog account={a} />
-                        {/* BE không cho tự khóa / tự xóa tài khoản đang dùng */}
-                        {!self && <ToggleActiveButton account={a} />}
-                        {!self && (
-                          <ConfirmDelete
-                            title={`Xóa tài khoản ${a.username}?`}
-                            description={
-                              a.kind === "codo"
-                                ? "Lượt chấm đã nhập vẫn được giữ nhưng mất tên người nhập. Cờ đỏ hết nhiệm kỳ nên Khóa thay vì xóa."
-                                : "Lượt chấm đã nhập vẫn được giữ nhưng mất tên người nhập."
-                            }
-                            onConfirm={() => apiDelete(`/accounts/${a.id}`)}
-                          />
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <div className="grid gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative sm:w-72">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Tìm theo tên đăng nhập, họ tên"
+                aria-label="Tìm tài khoản"
+                className="bg-white/70 pl-8"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground sm:ml-auto">
+              {keyword ? `${matches.length}/${all.length}` : all.length} tài khoản
+            </p>
+          </div>
+
+          {KINDS.map((kind) => (
+            <AccountSection
+              key={kind}
+              kind={kind}
+              rows={matches.filter((a) => a.kind === kind)}
+              total={all.filter((a) => a.kind === kind).length}
+              searching={!!keyword}
+              me={me}
+              accounts={all}
+              teachers={teachers.data ?? []}
+              classes={classes.data ?? []}
+            />
+          ))}
+        </div>
+      )}
     </>
   )
 }

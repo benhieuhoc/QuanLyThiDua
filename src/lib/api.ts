@@ -135,7 +135,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(`${API_URL}${path}`, {
       ...init,
       headers: {
-        "Content-Type": "application/json",
+        // FormData (tải file lên): để trình duyệt tự đặt multipart/form-data kèm boundary
+        ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
         ...(token && !isLogin ? { Authorization: `Bearer ${token}` } : {}),
         ...init?.headers,
       },
@@ -176,6 +177,10 @@ export const apiPut = <T>(path: string, data: unknown) =>
   api<T>(path, { method: "PUT", body: JSON.stringify(data) })
 
 export const apiDelete = <T>(path: string) => api<T>(path, { method: "DELETE" })
+
+// Gửi multipart/form-data (POST /files, PUT /files/:id thay nội dung)
+export const apiPostForm = <T>(path: string, form: FormData) => api<T>(path, { method: "POST", body: form })
+export const apiPutForm = <T>(path: string, form: FormData) => api<T>(path, { method: "PUT", body: form })
 
 // Tên file từ Content-Disposition (BE gửi cả filename* UTF-8 và filename ASCII)
 function downloadName(disposition: string | null, fallback: string) {

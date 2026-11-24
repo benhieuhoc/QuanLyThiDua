@@ -88,19 +88,6 @@ function GuestOverview() {
         }
       />
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Đăng nhập</CardTitle>
-          <CardDescription>
-            Phụ huynh đăng nhập để xem kết quả thi đua của lớp con em. Giáo viên và cờ đỏ đăng nhập để chấm điểm, xem xếp hạng
-            và dữ liệu trường.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LoginButtons />
-        </CardContent>
-      </Card>
-
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Tuần"
