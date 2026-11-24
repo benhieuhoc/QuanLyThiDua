@@ -53,10 +53,10 @@ export function LoginView() {
       <div className="w-full max-w-md">
         <div className="mb-4 overflow-hidden rounded-2xl shadow-sm ring-1 ring-black/5">
           <Image
-            src="/banner.jpg"
+            src="/banner.png"
             alt="Trường THCS Phan Đình Phùng – Trang web quản lý thi đua lớp học"
-            width={1024}
-            height={434}
+            width={2172}
+            height={386}
             sizes="(min-width: 480px) 448px, calc(100vw - 32px)"
             preload
             className="h-auto w-full"

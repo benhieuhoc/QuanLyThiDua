@@ -31,10 +31,10 @@ function Banner() {
   return (
     <div className="mx-auto mb-6 max-w-3xl overflow-hidden rounded-2xl shadow-sm ring-1 ring-black/5">
       <Image
-        src="/banner.jpg"
+        src="/banner.png"
         alt="Trường THCS Phan Đình Phùng – Trang web quản lý thi đua lớp học"
-        width={1024}
-        height={434}
+        width={2172}
+        height={386}
         sizes="(min-width: 800px) 768px, calc(100vw - 32px)"
         preload
         className="h-auto w-full"
